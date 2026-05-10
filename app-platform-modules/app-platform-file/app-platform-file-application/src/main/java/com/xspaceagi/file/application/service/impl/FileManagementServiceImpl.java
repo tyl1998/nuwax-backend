@@ -36,6 +36,9 @@ public class FileManagementServiceImpl implements FileManagementService {
     private String defaultStorageType;
 
     private FileStorageStrategy getStorageStrategy() {
+        if ("file".equals(defaultStorageType)){
+            defaultStorageType = "local";
+        }
         return storageStrategyMap.values().stream()
                 .filter(strategy -> strategy.getStorageType().equals(defaultStorageType))
                 .findFirst()

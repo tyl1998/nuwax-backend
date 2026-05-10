@@ -44,7 +44,7 @@ public class HttpClient {
 
     private static final int DEFAULT_CONNECT_TIMEOUT = 3000;
 
-    private static final int DEFAULT_SOCKET_TIMEOUT = 60000;
+    private static final int DEFAULT_SOCKET_TIMEOUT = 180000;
 
     private static final Charset UTF_8 = Charset.forName("UTF-8");
 
