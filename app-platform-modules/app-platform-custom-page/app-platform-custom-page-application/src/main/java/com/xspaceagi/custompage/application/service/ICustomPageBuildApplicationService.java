@@ -3,6 +3,7 @@ package com.xspaceagi.custompage.application.service;
 import java.util.Map;
 
 import com.xspaceagi.custompage.domain.model.CustomPageBuildModel;
+import com.xspaceagi.custompage.sdk.dto.TemplateTypeEnum;
 import com.xspaceagi.system.spec.common.UserContext;
 import com.xspaceagi.system.spec.dto.ReqResult;
 
@@ -44,7 +45,7 @@ public interface ICustomPageBuildApplicationService {
         /**
          * 初始化项目工程
          */
-        ReqResult<Map<String, Object>> initProject(Long projectId, UserContext userContext);
+        ReqResult<Map<String, Object>> initProject(Long projectId, TemplateTypeEnum templateType, UserContext userContext);
 
         /**
          * 删除项目文件

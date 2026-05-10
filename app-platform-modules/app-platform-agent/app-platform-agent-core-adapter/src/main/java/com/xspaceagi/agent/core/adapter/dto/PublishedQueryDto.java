@@ -1,6 +1,7 @@
 package com.xspaceagi.agent.core.adapter.dto;
 
 import com.xspaceagi.agent.core.adapter.repository.entity.Published;
+import com.xspaceagi.agent.core.spec.enums.UsageScenarioEnum;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -66,6 +67,9 @@ public class PublishedQueryDto implements Serializable {
 
     @Schema(description = "是否只返回官方标识的内容")
     private Boolean official;
+
+    @Schema(description = "适用场景筛选参数，如 [TaskAgent, PageApp]")
+    private List<UsageScenarioEnum> usageScenarios;
 
     /**
      * 获取页码

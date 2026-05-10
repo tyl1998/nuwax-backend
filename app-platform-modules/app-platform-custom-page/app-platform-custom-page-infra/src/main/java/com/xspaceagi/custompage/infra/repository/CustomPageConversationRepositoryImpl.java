@@ -104,4 +104,31 @@ public class CustomPageConversationRepositoryImpl implements ICustomPageConversa
         return superPage;
     }
 
+    @Override
+    public boolean updateUserSessionIdByRequestId(Long projectId, String requestId, String sessionId, Long userId) {
+        if (projectId == null || requestId == null || requestId.isBlank() || sessionId == null || sessionId.isBlank()
+                || userId == null) {
+            return false;
+        }
+        var wrapper = Wrappers.<CustomPageConversation>lambdaUpdate()
+                .eq(CustomPageConversation::getProjectId, projectId)
+                .eq(CustomPageConversation::getRequestId, requestId)
+                .eq(CustomPageConversation::getRole, "USER")
+                .eq(CustomPageConversation::getCreatorId, userId)
+                .eq(CustomPageConversation::getYn, YnEnum.Y.getKey());
+        CustomPageConversation updateEntity = new CustomPageConversation();
+        updateEntity.setSessionId(sessionId);
+        return customPageConversationService.update(updateEntity, wrapper);
+    }
+
+    @Override
+    public boolean deleteByProjectId(Long projectId, Long userId) {
+        if (projectId == null || projectId <= 0) {
+            return false;
+        }
+        var wrapper = Wrappers.<CustomPageConversation>lambdaQuery()
+                .eq(CustomPageConversation::getProjectId, projectId);
+        return customPageConversationService.remove(wrapper);
+    }
+
 }

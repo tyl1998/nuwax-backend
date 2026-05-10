@@ -47,31 +47,8 @@ public class I18nImportServiceImpl implements I18nImportService {
             return;
         }
 
-        List<I18nConfig> parsedConfigs = new ArrayList<>();
-        for (Map<String, Object> item : items) {
-            String rawLang = firstNonBlankString(item, "lang");
-            String fieldKey = firstNonBlankString(item, "fieldKey", "field_key");
-            if (StringUtils.isAnyBlank(rawLang, fieldKey)) {
-                continue;
-            }
-            String lang = requireCanonicalLang(rawLang);
-            String type = firstNonBlankString(item, "type");
-            String side = firstNonBlankString(item, "side");
-            String module = firstNonBlankString(item, "module");
-            String dataId = normalizeDataId(firstNonBlankString(item, "dataId", "data_id"));
-            I18nConfig entity = new I18nConfig();
-            entity.setTenantId(tenant.getId());
-            entity.setType(type);
-            entity.setSide(side);
-            entity.setModule(module);
-            entity.setDataId(dataId);
-            entity.setLang(lang);
-            entity.setFieldKey(fieldKey);
-            entity.setFieldValue(firstNonBlankString(item, "fieldValue", "field_value"));
-            entity.setRemark(firstNonBlankString(item, "remark"));
-            parsedConfigs.add(entity);
-        }
-        if (CollectionUtils.isEmpty(parsedConfigs)) {
+        List<I18nConfig> uniqueConfigs = parseAndDedupeConfigsFromItems(items, tenant.getId());
+        if (CollectionUtils.isEmpty(uniqueConfigs)) {
             if (CollectionUtils.isNotEmpty(items)) {
                 Map<String, Object> sample = items.get(0);
                 log.warn("配置项导入失败，解析后无有效配置项，tenantId={}, version={}, rawCount={}, firstEntryKeys={}",
@@ -81,13 +58,6 @@ public class I18nImportServiceImpl implements I18nImportService {
             }
             return;
         }
-
-        // 同一文件内与 uk_lang_key 一致去重（列顺序见 mysqlUkKey），避免批次内重复 INSERT
-        Map<String, I18nConfig> dedupedByUk = new LinkedHashMap<>();
-        for (I18nConfig cfg : parsedConfigs) {
-            dedupedByUk.put(mysqlUkKey(cfg), cfg);
-        }
-        List<I18nConfig> uniqueConfigs = new ArrayList<>(dedupedByUk.values());
 
         // 导入目标 tenantId 与当前会话租户可能不一致，必须忽略多租户拦截，否则查不到目标租户已有行、全部为 INSERT 易撞 uk_lang_key
         TenantFunctions.runWithIgnoreCheck(() -> {
@@ -112,6 +82,71 @@ public class I18nImportServiceImpl implements I18nImportService {
             }
             log.info("配置项导入完成，tenantId={}, version={}, inserted={}, skippedExisting={}",
                     tenant.getId(), version, toSave.size(), skippedExisting);
+        });
+    }
+
+    @Override
+    public void overwriteDiffConfigToTenant(Tenant tenant, String version) {
+        if (tenant == null || tenant.getId() == null) {
+            log.warn("差异配置覆写失败，租户信息无效，version={}", version);
+            return;
+        }
+        if (StringUtils.isBlank(version)) {
+            log.warn("差异配置覆写失败，版本号为空，tenantId={}", tenant.getId());
+            return;
+        }
+        List<Map<String, Object>> items = loadDiffConfigFromClasspath(version);
+        if (CollectionUtils.isEmpty(items)) {
+            log.warn("差异配置覆写失败，未读取到可用数据，tenantId={}, version={}", tenant.getId(), version);
+            return;
+        }
+        List<I18nConfig> uniqueConfigs = parseAndDedupeConfigsFromItems(items, tenant.getId());
+        if (CollectionUtils.isEmpty(uniqueConfigs)) {
+            if (CollectionUtils.isNotEmpty(items)) {
+                Map<String, Object> sample = items.get(0);
+                log.warn("差异配置覆写失败，解析后无有效配置项，tenantId={}, version={}, rawCount={}, firstEntryKeys={}",
+                        tenant.getId(), version, items.size(), sample == null ? null : sample.keySet());
+            } else {
+                log.warn("差异配置覆写失败，解析后无有效配置项，tenantId={}, version={}", tenant.getId(), version);
+            }
+            return;
+        }
+
+        TenantFunctions.runWithIgnoreCheck(() -> {
+            List<I18nConfig> existingAll = i18nService.list(Wrappers.<I18nConfig>lambdaQuery()
+                    .eq(I18nConfig::getTenantId, tenant.getId()));
+            Map<String, I18nConfig> existingByUk = new HashMap<>();
+            for (I18nConfig existing : existingAll) {
+                existingByUk.putIfAbsent(mysqlUkKey(existing), existing);
+            }
+
+            List<I18nConfig> toSave = new ArrayList<>();
+            List<I18nConfig> toUpdate = new ArrayList<>();
+            for (I18nConfig cfg : uniqueConfigs) {
+                String uk = mysqlUkKey(cfg);
+                I18nConfig hit = existingByUk.get(uk);
+                if (hit != null) {
+                    hit.setType(cfg.getType());
+                    hit.setSide(cfg.getSide());
+                    hit.setModule(cfg.getModule());
+                    hit.setDataId(cfg.getDataId());
+                    hit.setLang(cfg.getLang());
+                    hit.setFieldKey(cfg.getFieldKey());
+                    hit.setFieldValue(cfg.getFieldValue());
+                    hit.setRemark(cfg.getRemark());
+                    toUpdate.add(hit);
+                } else {
+                    toSave.add(cfg);
+                }
+            }
+            if (CollectionUtils.isNotEmpty(toSave)) {
+                i18nService.saveBatch(toSave);
+            }
+            if (CollectionUtils.isNotEmpty(toUpdate)) {
+                i18nService.updateBatchById(toUpdate);
+            }
+            log.info("差异配置覆写完成，tenantId={}, version={}, inserted={}, updated={}",
+                    tenant.getId(), version, toSave.size(), toUpdate.size());
         });
     }
 
@@ -225,6 +260,59 @@ public class I18nImportServiceImpl implements I18nImportService {
             log.warn("读取配置项文件失败，path={}", path, e);
             return List.of();
         }
+    }
+
+    private List<Map<String, Object>> loadDiffConfigFromClasspath(String version) {
+        String path = "i18n/i18n-config-diff-" + version + ".json";
+        try {
+            ClassPathResource resource = new ClassPathResource(path);
+            if (!resource.exists()) {
+                return List.of();
+            }
+            String json = new String(resource.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            return unwrapJsonToMapList(json, path, "configs", "items");
+        } catch (IOException e) {
+            log.warn("读取差异配置项文件失败，path={}", path, e);
+            return List.of();
+        }
+    }
+
+    /**
+     * 与 {@link #importConfigToTenant} 相同的条目解析与 uk 去重逻辑。
+     */
+    private List<I18nConfig> parseAndDedupeConfigsFromItems(List<Map<String, Object>> items, Long tenantId) {
+        List<I18nConfig> parsedConfigs = new ArrayList<>();
+        for (Map<String, Object> item : items) {
+            String rawLang = firstNonBlankString(item, "lang");
+            String fieldKey = firstNonBlankString(item, "fieldKey", "field_key");
+            if (StringUtils.isAnyBlank(rawLang, fieldKey)) {
+                continue;
+            }
+            String lang = requireCanonicalLang(rawLang);
+            String type = firstNonBlankString(item, "type");
+            String side = firstNonBlankString(item, "side");
+            String module = firstNonBlankString(item, "module");
+            String dataId = normalizeDataId(firstNonBlankString(item, "dataId", "data_id"));
+            I18nConfig entity = new I18nConfig();
+            entity.setTenantId(tenantId);
+            entity.setType(type);
+            entity.setSide(side);
+            entity.setModule(module);
+            entity.setDataId(dataId);
+            entity.setLang(lang);
+            entity.setFieldKey(fieldKey);
+            entity.setFieldValue(firstNonBlankString(item, "fieldValue", "field_value"));
+            entity.setRemark(firstNonBlankString(item, "remark"));
+            parsedConfigs.add(entity);
+        }
+        if (CollectionUtils.isEmpty(parsedConfigs)) {
+            return List.of();
+        }
+        Map<String, I18nConfig> dedupedByUk = new LinkedHashMap<>();
+        for (I18nConfig cfg : parsedConfigs) {
+            dedupedByUk.put(mysqlUkKey(cfg), cfg);
+        }
+        return new ArrayList<>(dedupedByUk.values());
     }
 
     /**

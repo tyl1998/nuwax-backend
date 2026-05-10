@@ -62,6 +62,7 @@ auth:
     - /api/temp/chat/completions
     - /api/logo/
     - /api/file
+    - /api/f/
     - /api/mcp/sse
     - /api/mcp/message
     - /api/v1/
@@ -118,7 +119,7 @@ mybatis-plus:
 installation-source: saas
 
 app:
-  version: 1.0.7.9
+  version: 1.0.8.1
 
 stt:
   api:

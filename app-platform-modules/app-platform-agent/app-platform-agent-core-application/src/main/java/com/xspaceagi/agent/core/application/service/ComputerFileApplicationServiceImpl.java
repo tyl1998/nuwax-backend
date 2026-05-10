@@ -437,7 +437,7 @@ public class ComputerFileApplicationServiceImpl implements IComputerFileApplicat
             throw BizException.of(ErrorCodeEnum.INVALID_PARAM, BizExceptionCodeEnum.validationFailedWithDetail, e.getMessage());
         }
         if (sandboxServer == null) {
-            throw BizException.of(ErrorCodeEnum.INVALID_PARAM, BizExceptionCodeEnum.agentFileServerNotFound);
+            throw BizException.of(ErrorCodeEnum.INVALID_PARAM, BizExceptionCodeEnum.agentSandboxNotFound);
         }
         ConversationDto currentConversation = sandboxServer.getCurrentConversation();
         if (currentConversation == null) {

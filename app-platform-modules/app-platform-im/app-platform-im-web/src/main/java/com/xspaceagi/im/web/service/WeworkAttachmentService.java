@@ -31,7 +31,7 @@ import java.util.Base64;
 public class WeworkAttachmentService {
 
     @Resource
-    private FileUploadHelperService fileUploadHelperService;
+    private ImFileUploadHelper fileUploadHelperService;
 
     private final RestTemplate restTemplate;
 
@@ -51,7 +51,8 @@ public class WeworkAttachmentService {
      * @return 上传成功的附件列表 + 不支持的附件列表
      */
     public WeworkAttachmentResultDto downloadAndUpload(String corpId, String corpSecret, String mediaId,
-                                                       String type, TenantConfigDto tenantConfig) {
+                                                       String type, TenantConfigDto tenantConfig,
+                                                       Long uploadUserId) {
         WeworkAttachmentResultDto result = new WeworkAttachmentResultDto();
 
         if (StringUtils.isBlank(mediaId)) {
@@ -78,7 +79,7 @@ public class WeworkAttachmentService {
             log.info("WeCom attachment download OK: mediaId={}, type={}, size={}", mediaId, type, fileBytes.length);
 
             // 3. 使用统一服务检测文件类型并上传
-            FileUploadHelperService.UploadResult uploadResult = fileUploadHelperService.detectAndUpload(
+            ImFileUploadHelper.UploadResult uploadResult = fileUploadHelperService.detectAndUpload(
                     fileBytes,
                     null,                    // 无HTTP响应头文件名
                     null,                    // 无HTTP响应头Content-Type
@@ -86,7 +87,8 @@ public class WeworkAttachmentService {
                     type,                    // 原始类型
                     mediaId,                 // 默认文件名
                     ImChannelEnum.WEWORK,     // IM 渠道类型
-                    tenantConfig
+                    tenantConfig,
+                    uploadUserId
             );
 
             if (uploadResult.isSuccess()) {
@@ -123,7 +125,8 @@ public class WeworkAttachmentService {
      * @param tenantConfig 租户配置
      * @return 上传成功的附件列表 + 不支持的附件列表
      */
-    public WeworkAttachmentResultDto downloadAndUploadFromUrl(String url, String type, String aesKey, TenantConfigDto tenantConfig) {
+    public WeworkAttachmentResultDto downloadAndUploadFromUrl(String url, String type, String aesKey, TenantConfigDto tenantConfig,
+                                                              Long uploadUserId) {
         WeworkAttachmentResultDto result = new WeworkAttachmentResultDto();
 
         if (StringUtils.isBlank(url)) {
@@ -148,18 +151,24 @@ public class WeworkAttachmentService {
 
             // 2. 尝试解密附件数据（如果可能）
             byte[] fileBytes = null;
-            try {
-                // 企业微信智能机器人的图片可能是加密的，但也可能只是特殊格式
-                // 先尝试解密
-                fileBytes = decryptWeworkData(encryptedBytes, aesKey);
-                log.info("WeCom attachment decrypt OK: rawSize={}, decryptedSize={}", encryptedBytes.length, fileBytes.length);
-                log.info("First 16 bytes after decrypt: {}", bytesToHex(fileBytes, Math.min(16, fileBytes.length)));
-            } catch (Exception e) {
-                log.warn("WeCom attachment decrypt failed: url={}, error: {}", url, e.getMessage());
-                // 有些文件（比如普通附件）可能本身并不需要解密；
-                // 解密失败时，尝试把加密字节当成明文继续识别与上传（仅 type=file 才这样做）。
-                if ("file".equals(type)) {
-                    fileBytes = encryptedBytes;
+            if (StringUtils.isBlank(aesKey)) {
+                // 自建应用回调的 PicUrl 通常是明文可下载图片，无需 AES 解密
+                fileBytes = encryptedBytes;
+                log.info("WeCom attachment uses plain bytes (no aesKey): url={}, type={}, size={}", url, type, fileBytes.length);
+            } else {
+                try {
+                    // 企业微信智能机器人的图片可能是加密的，但也可能只是特殊格式
+                    // 先尝试解密
+                    fileBytes = decryptWeworkData(encryptedBytes, aesKey);
+                    log.info("WeCom attachment decrypt OK: rawSize={}, decryptedSize={}", encryptedBytes.length, fileBytes.length);
+                    log.info("First 16 bytes after decrypt: {}", bytesToHex(fileBytes, Math.min(16, fileBytes.length)));
+                } catch (Exception e) {
+                    log.warn("WeCom attachment decrypt failed: url={}, error: {}", url, e.getMessage());
+                    // 有些文件（比如普通附件）可能本身并不需要解密；
+                    // 解密失败时，尝试把加密字节当成明文继续识别与上传（仅 type=file 才这样做）。
+                    if ("file".equals(type)) {
+                        fileBytes = encryptedBytes;
+                    }
                 }
             }
 
@@ -171,7 +180,7 @@ public class WeworkAttachmentService {
             }
 
             // 3. 使用统一服务检测文件类型并上传
-            FileUploadHelperService.UploadResult uploadResult = fileUploadHelperService.detectAndUpload(
+            ImFileUploadHelper.UploadResult uploadResult = fileUploadHelperService.detectAndUpload(
                     fileBytes,
                     headerFileName,       // Content-Disposition中的文件名
                     headerContentType,    // Content-Type
@@ -179,7 +188,8 @@ public class WeworkAttachmentService {
                     type,                 // 原始类型
                     "wework_attachment",  // 默认文件名
                     ImChannelEnum.WEWORK,  // IM 渠道类型
-                    tenantConfig
+                    tenantConfig,
+                    uploadUserId
             );
 
             if (uploadResult.isSuccess()) {

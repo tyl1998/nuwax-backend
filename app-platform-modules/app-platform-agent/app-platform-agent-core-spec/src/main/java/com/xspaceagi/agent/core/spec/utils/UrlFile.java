@@ -1,5 +1,15 @@
 package com.xspaceagi.agent.core.spec.utils;
 
+import com.alibaba.fastjson2.JSONObject;
+import com.xspaceagi.file.sdk.IFileAccessService;
+import com.xspaceagi.system.spec.utils.HttpClient;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.poi.xwpf.usermodel.*;
+import org.apache.tika.Tika;
+import org.apache.tika.exception.TikaException;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
 import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -12,36 +22,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import org.apache.poi.xwpf.usermodel.IBodyElement;
-import org.apache.poi.xwpf.usermodel.XWPFDocument;
-import org.apache.poi.xwpf.usermodel.XWPFParagraph;
-import org.apache.poi.xwpf.usermodel.XWPFTable;
-import org.apache.poi.xwpf.usermodel.XWPFTableCell;
-import org.apache.poi.xwpf.usermodel.XWPFTableRow;
-import org.apache.tika.Tika;
-import org.apache.tika.exception.TikaException;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
-import com.alibaba.fastjson2.JSONObject;
-import com.xspaceagi.system.spec.utils.FileAkUtil;
-import com.xspaceagi.system.spec.utils.HttpClient;
-
-import lombok.extern.slf4j.Slf4j;
-
 @Slf4j
 @Component
 public class UrlFile {
 
     private static Tika tika = new Tika();
 
-    private static FileAkUtil fileAkUtil;
+    private static IFileAccessService iFileAccessService;
 
     private static HttpClient httpClient;
 
     @Autowired
-    public void setFileAkUtil(FileAkUtil fileAkUtil) {
-        UrlFile.fileAkUtil = fileAkUtil;
+    public void setIFileAccessService(IFileAccessService iFileAccessService) {
+        UrlFile.iFileAccessService = iFileAccessService;
     }
 
     @Autowired
@@ -51,7 +44,7 @@ public class UrlFile {
 
     public static String parseToString(String url) {
         try {
-            url = fileAkUtil.getFileUrlWithAk(url);
+            url = iFileAccessService.getFileUrlWithAk(url, true);
             return tika.parseToString(new URL(url));
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -88,7 +81,7 @@ public class UrlFile {
 
     public static String wordToMarkdown(String url) {
         //增加对doc的支持
-        url = fileAkUtil.getFileUrlWithAk(url);
+        url = iFileAccessService.getFileUrlWithAk(url, true);
         if (url.endsWith(".doc")) {
             // 处理doc文件
             return parseToString(url);
@@ -173,7 +166,7 @@ public class UrlFile {
     }
 
     public static byte[] downLoad(String url) {
-        url = fileAkUtil.getFileUrlWithAk(url);
+        url = iFileAccessService.getFileUrlWithAk(url, true);
         try {
             return httpClient.download(url);
         } catch (Exception e) {

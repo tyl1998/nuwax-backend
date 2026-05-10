@@ -116,7 +116,7 @@ public class DingtalkAgentApplicationServiceImpl implements DingtalkAgentApplica
             return AgentExecuteResultWithConv.builder().text(out).conversationId(convId).agentId(agentId).build();
         } catch (Exception e) {
             log.error("DingTalk agent error: senderId={}", senderId, e);
-            String err = "模型执行异常: " + (e.getMessage() != null ? e.getMessage() : "未知错误");
+            String err = e.getMessage() != null ? e.getMessage() : "模型执行异常";
             return AgentExecuteResultWithConv.builder().text(err).conversationId(null).agentId(agentId).build();
         } finally {
             RequestContext.remove();

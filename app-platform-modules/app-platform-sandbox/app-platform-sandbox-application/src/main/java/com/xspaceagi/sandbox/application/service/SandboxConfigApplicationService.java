@@ -51,6 +51,8 @@ public interface SandboxConfigApplicationService {
      */
     List<SandboxConfigDto> listGlobalConfigsByType();
 
+    List<SandboxConfigDto> listPageDevelopmentSandboxes();
+
     boolean hasGlobalConfigsForSelect();
 
     /**

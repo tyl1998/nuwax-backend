@@ -54,5 +54,9 @@
             <groupId>com.xspaceagi</groupId>
             <artifactId>app-platform-memory-sdk</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.xspaceagi</groupId>
+            <artifactId>app-platform-file-sdk</artifactId>
+        </dependency>
     </dependencies>
 </project>

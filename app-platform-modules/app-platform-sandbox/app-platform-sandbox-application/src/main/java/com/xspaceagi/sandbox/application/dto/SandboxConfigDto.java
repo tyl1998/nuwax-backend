@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 import java.util.Date;
+import java.util.List;
 
 /**
  * 沙盒配置 DTO
@@ -65,6 +66,15 @@ public class SandboxConfigDto {
 
     @Schema(description = "会话密钥，仅首次注册时有效")
     private String token;
+
+    @Schema(description = "沙盒类型：智能体 Agent；应用开发 PageApp")
+    private String type;
+
+    @Schema(description = "绑定信息")
+    private List<SandboxBindInfoDto> bindItems;
+
+    @Schema(description = "沙盒隔离：Tenant-租户维度隔离；Space-空间维度隔离；Project-项目维度隔离")
+    private String isolation;
 
     @Schema(description = "创建时间")
     private Date created;

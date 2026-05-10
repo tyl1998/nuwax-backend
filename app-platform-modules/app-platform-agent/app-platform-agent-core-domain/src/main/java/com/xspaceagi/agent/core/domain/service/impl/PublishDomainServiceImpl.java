@@ -14,6 +14,7 @@ import com.xspaceagi.agent.core.adapter.repository.PublishedStatisticsRepository
 import com.xspaceagi.agent.core.adapter.repository.entity.PublishApply;
 import com.xspaceagi.agent.core.adapter.repository.entity.Published;
 import com.xspaceagi.agent.core.adapter.repository.entity.PublishedStatistics;
+import com.xspaceagi.agent.core.spec.enums.UsageScenarioEnum;
 import com.xspaceagi.agent.core.domain.service.PublishDomainService;
 import com.xspaceagi.system.application.dto.TenantConfigDto;
 import com.xspaceagi.system.spec.common.RequestContext;
@@ -170,6 +171,21 @@ public class PublishDomainServiceImpl implements PublishDomainService {
         }
         if (!CollectionUtils.isEmpty(publishedQueryDto.getTargetIds())) {
             queryWrapper.in(Published::getTargetId, publishedQueryDto.getTargetIds());
+        }
+        // 技能扩展字段筛选（ext JSON）
+        if (publishedQueryDto.getTargetType() == Published.TargetType.Skill) {
+            Boolean supportTaskAgent = extractUsageScenarioFlag(publishedQueryDto.getUsageScenarios(), UsageScenarioEnum.TaskAgent);
+            Boolean supportPageApp = extractUsageScenarioFlag(publishedQueryDto.getUsageScenarios(), UsageScenarioEnum.PageApp);
+            if (Boolean.TRUE.equals(supportTaskAgent)) {
+                queryWrapper.apply(
+                        "(CAST(JSON_UNQUOTE(JSON_EXTRACT(ext, '$.supportTaskAgent')) AS UNSIGNED) = 1 OR ext IS NULL)"
+                );
+            }
+            if (Boolean.TRUE.equals(supportPageApp)) {
+                queryWrapper.apply(
+                        "CAST(JSON_UNQUOTE(JSON_EXTRACT(ext, '$.supportPageApp')) AS UNSIGNED) = 1"
+                );
+            }
         }
         List<Published> recommendAgentList = new ArrayList<>();
         if (publishedQueryDto.getTargetType() == Published.TargetType.Agent
@@ -473,5 +489,15 @@ public class PublishDomainServiceImpl implements PublishDomainService {
         } catch (Exception e) {
             throw new RuntimeException("Failed to convert map to object", e);
         }
+    }
+
+    private Boolean extractUsageScenarioFlag(List<UsageScenarioEnum> usageScenarios, UsageScenarioEnum targetScenario) {
+        if (targetScenario == null) {
+            return null;
+        }
+        if (usageScenarios == null || usageScenarios.isEmpty()) {
+            return null;
+        }
+        return usageScenarios.contains(targetScenario) ? Boolean.TRUE : null;
     }
 }

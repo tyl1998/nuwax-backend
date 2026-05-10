@@ -59,6 +59,10 @@
         </dependency>
         <dependency>
             <groupId>com.xspaceagi</groupId>
+            <artifactId>app-platform-file-sdk</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.xspaceagi</groupId>
             <artifactId>system-sdk</artifactId>
         </dependency>
 

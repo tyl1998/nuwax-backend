@@ -52,7 +52,7 @@ import com.xspaceagi.system.spec.enums.YesOrNoEnum;
 import com.xspaceagi.system.spec.exception.BizException;
 import com.xspaceagi.system.spec.exception.BizExceptionCodeEnum;
 import com.xspaceagi.system.spec.tenant.thread.TenantFunctions;
-import com.xspaceagi.system.spec.utils.FileAkUtil;
+import com.xspaceagi.file.sdk.IFileAccessService;
 import com.xspaceagi.system.spec.utils.I18nUtil;
 import com.xspaceagi.system.spec.utils.RedisUtil;
 import com.xspaceagi.system.spec.utils.TimeWheel;
@@ -129,7 +129,7 @@ public class ConversationApplicationServiceImpl extends AbstractTaskExecuteServi
     private TimeWheel timeWheel;
 
     @Resource
-    private FileAkUtil fileAkUtil;
+    private IFileAccessService iFileAccessService;
 
     @Resource
     private NotifyMessageApplicationService notifyMessageApplicationService;
@@ -1247,7 +1247,7 @@ public class ConversationApplicationServiceImpl extends AbstractTaskExecuteServi
 
         //附件追加AK
         if (tryReqDto.getAttachments() != null) {
-            tryReqDto.getAttachments().forEach(attachmentDto -> attachmentDto.setFileUrl(fileAkUtil.getFileUrlWithAk(attachmentDto.getFileUrl())));
+            tryReqDto.getAttachments().forEach(attachmentDto -> attachmentDto.setFileUrl(iFileAccessService.getFileUrlWithAk(attachmentDto.getFileUrl(), true)));
         }
 
         //任务模式下，模型上下文轮数改为0
@@ -1322,8 +1322,14 @@ public class ConversationApplicationServiceImpl extends AbstractTaskExecuteServi
                         .userId(RequestContext.get().getUserId())
                         .cId(conversationDto.getId())
                         .skillConfigs(userAtSkillConfigs).build();
-                agentWorkspaceApplicationService.addSkillsToWorkspace(addSkillsToWorkspaceDto);
-                skillApplicationService.saveRecentlyUsedSkills(userAtSkillConfigs.stream().map(SkillConfigDto::getId).collect(Collectors.toList()));
+                try {
+                    agentWorkspaceApplicationService.addSkillsToWorkspace(addSkillsToWorkspaceDto);
+                    skillApplicationService.saveRecentlyUsedSkills(userAtSkillConfigs.stream().map(SkillConfigDto::getId).collect(Collectors.toList()));
+                } catch (Exception e) {
+                    errorOutput.setError(e.getMessage());
+                    agentExecuteResult.setError(e.getMessage());
+                    return errorOutput(errorOutput, conversationDto);
+                }
             }
             //创建沙箱访问平台的accessKey，针对UserAccessKeyDto.AKTargetType.Sandbox已控制可访问范围
             UserAccessKeyDto userAccessKey = userAccessKeyApiService.queryAccessKey(agentContext.getUserId(), UserAccessKeyDto.AKTargetType.Sandbox, agentConfigDto.getId().toString());

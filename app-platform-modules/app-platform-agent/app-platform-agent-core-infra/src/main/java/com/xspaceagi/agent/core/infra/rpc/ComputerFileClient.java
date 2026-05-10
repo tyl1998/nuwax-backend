@@ -54,7 +54,7 @@ public class ComputerFileClient {
     private String getBaseUrl(Long cId) {
         String serverUrl = getVncFileServerUrl(cId);
         if (serverUrl == null) {
-            throw BizException.of(BizExceptionCodeEnum.agentFileServerNotFound);
+            throw BizException.of(BizExceptionCodeEnum.agentSandboxNotFound);
         }
         return serverUrl + "/api";
     }

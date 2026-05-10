@@ -109,4 +109,35 @@ public class CustomPageConversationDomainServiceImpl implements ICustomPageConve
         }
     }
 
+    @Override
+    public ReqResult<Void> updateUserSessionIdByRequestId(Long projectId, String requestId, String sessionId,
+                                                           UserContext userContext) {
+        try {
+            if (projectId == null || projectId <= 0 || requestId == null || requestId.isBlank()
+                    || sessionId == null || sessionId.isBlank()) {
+                return ReqResult.error("0001", "Invalid parameters for updating user sessionId");
+            }
+            boolean updated = customPageConversationRepository.updateUserSessionIdByRequestId(projectId, requestId,
+                    sessionId, userContext.getUserId());
+            return updated ? ReqResult.success() : ReqResult.error("0001", "No matched USER conversation found");
+        } catch (Exception e) {
+            log.error("[Domain] update user sessionId by requestId failed, project Id={}, requestId={}", projectId, requestId, e);
+            return ReqResult.error("0001", "Failed to update user sessionId: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public ReqResult<Void> deleteByProjectId(Long projectId, UserContext userContext) {
+        try {
+            if (projectId == null || projectId <= 0) {
+                return ReqResult.error("0001", "projectId is required or invalid");
+            }
+            boolean deleted = customPageConversationRepository.deleteByProjectId(projectId, userContext.getUserId());
+            return deleted ? ReqResult.success() : ReqResult.error("0001", "Delete conversation records failed");
+        } catch (Exception e) {
+            log.error("[Domain] delete conversations by project failed, project Id={}", projectId, e);
+            return ReqResult.error("0001", "Failed to delete conversations: " + e.getMessage());
+        }
+    }
+
 }

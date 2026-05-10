@@ -9,7 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
-import java.util.Iterator;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -63,16 +63,14 @@ public class ProxyChannelManager {
      * @param channel
      */
     public static void removeCmdChannel(Channel channel) {
-        logger.warn("channel closed, clear user channels, {}", channel);
+        logger.info("channel closed, clear user channels, {}", channel);
         if (channel.attr(CHANNEL_PORT).get() == null) {
             return;
         }
 
         String clientKey = channel.attr(CHANNEL_CLIENT_KEY).get();
         Channel channel0 = cmdChannels.remove(clientKey);
-        if (channel != channel0) {
-            cmdChannels.put(clientKey, channel);
-        }
+        logger.info("remove cmd channel, {}", channel0);
 
         List<Integer> ports = channel.attr(CHANNEL_PORT).get();
         for (int port : ports) {
@@ -82,7 +80,7 @@ public class ProxyChannelManager {
             }
 
             // 在执行断连之前新的连接已经连上来了
-            if (proxyChannel != channel) {
+            if (!proxyChannel.id().equals(channel.id())) {
                 portCmdChannelMapping.put(port, proxyChannel);
             }
         }
@@ -93,9 +91,8 @@ public class ProxyChannelManager {
         }
 
         Map<String, Channel> userChannels = getUserChannels(channel);
-        Iterator<String> ite = userChannels.keySet().iterator();
-        while (ite.hasNext()) {
-            Channel userChannel = userChannels.get(ite.next());
+        for (String s : new ArrayList<>(userChannels.keySet())) {
+            Channel userChannel = userChannels.get(s);
             if (userChannel.isActive()) {
                 userChannel.close();
                 logger.info("disconnect user channel {}", userChannel);

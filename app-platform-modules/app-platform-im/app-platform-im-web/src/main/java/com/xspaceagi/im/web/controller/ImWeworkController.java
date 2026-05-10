@@ -233,7 +233,7 @@ public class ImWeworkController {
             return;
         }
 
-        // 简单 XML 解析：提取 AgentID / FromUserName / ToUserName / MsgType / Content / MsgId / MediaId
+        // 简单 XML 解析：提取 AgentID / FromUserName / ToUserName / MsgType / Content / MsgId / MediaId / PicUrl
         String agentId = extractXmlTag(decryptedXml, "AgentID");
         String toUserName = extractXmlTag(decryptedXml, "ToUserName");
         String fromUserName = extractXmlTag(decryptedXml, "FromUserName");
@@ -241,6 +241,7 @@ public class ImWeworkController {
         String content = extractXmlTag(decryptedXml, "Content");
         String msgId = extractXmlTag(decryptedXml, "MsgId");
         String mediaId = extractXmlTag(decryptedXml, "MediaId");
+        String picUrl = extractXmlTag(decryptedXml, "PicUrl");
 
         log.info("WeCom self-built app message: agentId={}, fromUserName={}, toUserName={}, msgType={}, msgId={}, content={}",
                 agentId, fromUserName, toUserName, msgType, msgId, content);
@@ -266,11 +267,20 @@ public class ImWeworkController {
             final String finalFromUserName = fromUserName;
             final String finalMsgType = msgType != null ? msgType.toLowerCase() : "";
             final String finalContent = content;
+            final String finalMsgId = msgId;
             final String finalMediaId = mediaId;
+            final String finalPicUrl = picUrl;
             final WeworkBotConfig finalConfig = appConfig;
 
             asyncTaskExecutor.execute(() -> {
+                RequestContext<Object> requestContext = new RequestContext<>();
                 try {
+                    TenantConfigDto tenantConfig = tenantConfigApplicationService.getTenantConfig(finalConfig.getTenantId());
+                    requestContext.setTenantId(finalConfig.getTenantId());
+                    requestContext.setUserId(finalConfig.getUserId());
+                    requestContext.setTenantConfig(tenantConfig);
+                    RequestContext.set(requestContext);
+
                     // 提取用户消息与附件（完整逻辑放在异步，避免阻塞被动回复）
                     String userMessage = "";
                     List<AttachmentDto> attachments = new ArrayList<>();
@@ -291,10 +301,10 @@ public class ImWeworkController {
 
                         if (StringUtils.isNotBlank(finalMediaId)) {
                             try {
-                                TenantConfigDto tenantConfig = tenantConfigApplicationService.getTenantConfig(finalConfig.getTenantId());
+                                TenantConfigDto attachmentTenantConfig = tenantConfigApplicationService.getTenantConfig(finalConfig.getTenantId());
                                 var attachmentResult = weworkAttachmentService.downloadAndUpload(
                                         finalConfig.getCorpId(), finalConfig.getCorpSecret(), finalMediaId, finalMsgType,
-                                        tenantConfig);
+                                        attachmentTenantConfig, finalConfig.getUserId());
                                 attachments = attachmentResult.getAttachments();
                                 if (!attachmentResult.getUnsupportedKeys().isEmpty()) {
                                     userMessage = userMessage + "\n\n[系统提示：部分附件类型不支持下载，请发送具体文件。]";
@@ -303,6 +313,29 @@ public class ImWeworkController {
                                 log.error("WeCom self-built app attachment error (async): mediaId={}, msgType={}", finalMediaId, finalMsgType, e);
                                 userMessage = userMessage + "\n\n[系统提示：附件处理失败，请稍后重试。]";
                             }
+                        } else if ("image".equals(finalMsgType) && StringUtils.isNotBlank(finalPicUrl)) {
+                            try {
+                                TenantConfigDto attachmentTenantConfig = tenantConfigApplicationService.getTenantConfig(finalConfig.getTenantId());
+                                var attachmentResult = weworkAttachmentService.downloadAndUploadFromUrl(
+                                        finalPicUrl, finalMsgType, null, attachmentTenantConfig, finalConfig.getUserId());
+                                attachments = attachmentResult.getAttachments();
+                                if (!attachmentResult.getUnsupportedKeys().isEmpty()) {
+                                    userMessage = userMessage + "\n\n[系统提示：图片处理失败，请稍后重试。]";
+                                }
+                            } catch (Exception e) {
+                                log.error("WeCom self-built app image attachment error (async): picUrl={}, msgType={}", finalPicUrl, finalMsgType, e);
+                                userMessage = userMessage + "\n\n[系统提示：图片处理失败，请稍后重试。]";
+                            }
+                        } else {
+                            log.warn("WeCom self-built app attachment missing media identifier: msgType={}, mediaId={}, picUrl={}",
+                                    finalMsgType, finalMediaId, finalPicUrl);
+                            if ("file".equals(finalMsgType) || "voice".equals(finalMsgType) || "video".equals(finalMsgType)) {
+                                userMessage = userMessage + "\n\n[系统提示：该附件缺少MediaId，暂不支持上传，请稍后重试或联系管理员检查企业微信回调配置。]";
+                            } else if ("image".equals(finalMsgType)) {
+                                userMessage = userMessage + "\n\n[系统提示：该图片缺少可下载标识，暂不支持上传，请稍后重试。]";
+                            }
+                            log.warn("WeCom self-built app attachment skipped: msgId={}, msgType={}, fromUser={}, mediaId={}, picUrl={}",
+                                    finalMsgId, finalMsgType, finalFromUserName, finalMediaId, finalPicUrl);
                         }
                     }
 
@@ -332,6 +365,8 @@ public class ImWeworkController {
                     } catch (Exception ignored) {
                         // 忽略再次发送失败
                     }
+                } finally {
+                    RequestContext.remove();
                 }
             });
         }
@@ -559,7 +594,7 @@ public class ImWeworkController {
             try {
                 TenantConfigDto tenantConfig = tenantConfigApplicationService.getTenantConfig(botConfig.getTenantId());
                 var attachmentResult = weworkAttachmentService.downloadAndUploadFromUrl(
-                        attachmentUrl, msgtype, botConfig.getEncodingAesKey(), tenantConfig);
+                        attachmentUrl, msgtype, botConfig.getEncodingAesKey(), tenantConfig, botConfig.getUserId());
                 attachments = attachmentResult.getAttachments();
                 log.info("WeCom attachment done: url={}, count={}", attachmentUrl, attachments.size());
             } catch (Exception e) {
@@ -669,7 +704,11 @@ public class ImWeworkController {
     }
 
     private static boolean isNewCommand(String userMessage) {
-        return "/new".equals(StringUtils.trimToEmpty(userMessage));
+        String normalized = StringUtils.trimToEmpty(userMessage)
+                .replace('\u00A0', ' ')
+                .replaceAll("^(?:@[^\\s]+\\s*)+", "")
+                .trim();
+        return "/new".equals(normalized);
     }
 
     private void createNewConversationForWework(String senderId, String chatType, String chatId, String targetType,

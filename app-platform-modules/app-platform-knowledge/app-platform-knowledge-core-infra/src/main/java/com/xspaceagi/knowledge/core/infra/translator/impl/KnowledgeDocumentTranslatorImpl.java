@@ -1,17 +1,23 @@
 package com.xspaceagi.knowledge.core.infra.translator.impl;
 
 import com.alibaba.fastjson2.JSON;
+import com.xspaceagi.file.sdk.IFileAccessService;
 import com.xspaceagi.knowledge.core.infra.dao.entity.KnowledgeDocument;
 import com.xspaceagi.knowledge.core.infra.translator.IKnowledgeDocumentTranslator;
-import com.xspaceagi.knowledge.sdk.vo.SegmentConfigModel;
 import com.xspaceagi.knowledge.domain.model.KnowledgeDocumentModel;
+import com.xspaceagi.knowledge.sdk.vo.SegmentConfigModel;
 import com.xspaceagi.system.spec.enums.YnEnum;
+import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 
 import java.util.Objects;
 
 @Service
 public class KnowledgeDocumentTranslatorImpl implements IKnowledgeDocumentTranslator {
+
+    @Resource
+    private IFileAccessService fileAccessService;
+
     @Override
     public KnowledgeDocumentModel convertToModel(KnowledgeDocument entity) {
         if (entity == null) {
@@ -21,7 +27,7 @@ public class KnowledgeDocumentTranslatorImpl implements IKnowledgeDocumentTransl
         knowledgeDocumentModel.setId(entity.getId());
         knowledgeDocumentModel.setKbId(entity.getKbId());
         knowledgeDocumentModel.setName(entity.getName());
-        knowledgeDocumentModel.setDocUrl(entity.getDocUrl());
+        knowledgeDocumentModel.setDocUrl(fileAccessService.getFileUrlWithAk(entity.getDocUrl(), true));
         knowledgeDocumentModel.setPubStatus(entity.getPubStatus());
         knowledgeDocumentModel.setHasQa(entity.getHasQa());
         knowledgeDocumentModel.setHasEmbedding(entity.getHasEmbedding());

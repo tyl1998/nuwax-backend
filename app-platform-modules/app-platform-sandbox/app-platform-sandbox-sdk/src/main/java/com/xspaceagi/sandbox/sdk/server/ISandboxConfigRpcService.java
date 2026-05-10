@@ -19,7 +19,7 @@ public interface ISandboxConfigRpcService {
     List<SandboxConfigRpcDto> queryUserConfigs(Long userId);
 
     /**
-     * 查询全局配置列表
+     * 查询全局配置列表（通用智能体沙箱）
      *
      * @return 配置列表
      */
@@ -53,4 +53,16 @@ public interface ISandboxConfigRpcService {
     SandboxGlobalConfigDto getGlobalConfig(Long tenantId);
 
     Long queryUserSelectedSandboxId(Long userId, Long agentId);
+
+    /**
+     * 选择应用开发沙盒
+     *
+     * @param tenantId  租户ID
+     * @param userId    用户ID
+     * @param spaceId   空间ID
+     * @param projectId 项目ID
+     * @param sandboxId 沙盒ID，可选，项目如果已经有了就传递
+     * @return 沙盒信息
+     */
+    SandboxConfigRpcDto selectAppDevelopmentSandbox(Long tenantId, Long userId, Long spaceId, Long projectId, Long sandboxId);
 }

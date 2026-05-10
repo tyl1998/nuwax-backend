@@ -46,6 +46,7 @@ public class WechatIlinkInboundMediaService {
             cdnBase = channelDto.getWechatIlink().getCdnBaseUrl();
         }
         Long tenantId = channelDto != null ? channelDto.getTenantId() : null;
+        Long userId = channelDto != null ? channelDto.getUserId() : null;
 
         List<AttachmentDto> out = new ArrayList<>();
         for (MessageItem it : msg.getItemList()) {
@@ -56,7 +57,7 @@ public class WechatIlinkInboundMediaService {
                 switch (it.getType()) {
                     case WechatIlinkMessageHelper.ITEM_IMAGE -> {
                         byte[] raw = downloadImage(it.getImageItem(), cdnBase);
-                        addOne(out, raw, null, null, tenantId);
+                        addOne(out, raw, null, null, tenantId, userId);
                     }
                     case WechatIlinkMessageHelper.ITEM_VOICE -> {
                         byte[] voiceBytes = downloadVoice(it.getVoiceItem(), cdnBase);
@@ -68,15 +69,15 @@ public class WechatIlinkInboundMediaService {
                                 voiceMime = "audio/wav";
                             }
                         }
-                        addOne(out, voiceBytes, null, voiceMime, tenantId);
+                        addOne(out, voiceBytes, null, voiceMime, tenantId, userId);
                     }
                     case WechatIlinkMessageHelper.ITEM_FILE -> {
                         byte[] fileBytes = downloadFile(it.getFileItem(), cdnBase);
                         String fileName = it.getFileItem() != null ? it.getFileItem().getFileName() : null;
                         String mime = MimeTypeUtils.inferMimeTypeFromFileName(fileName);
-                        addOne(out, fileBytes, fileName, mime, tenantId);
+                        addOne(out, fileBytes, fileName, mime, tenantId, userId);
                     }
-                    case WechatIlinkMessageHelper.ITEM_VIDEO -> addOne(out, downloadVideo(it.getVideoItem(), cdnBase), null, "video/mp4", tenantId);
+                    case WechatIlinkMessageHelper.ITEM_VIDEO -> addOne(out, downloadVideo(it.getVideoItem(), cdnBase), null, "video/mp4", tenantId, userId);
                     default -> {
                         // ITEM_TEXT 或未知类型，不处理附件
                     }
@@ -88,11 +89,11 @@ public class WechatIlinkInboundMediaService {
         return out;
     }
 
-    private void addOne(List<AttachmentDto> out, byte[] bytes, String filename, String mimeOverride, Long tenantId) {
+    private void addOne(List<AttachmentDto> out, byte[] bytes, String filename, String mimeOverride, Long tenantId, Long userId) {
         if (bytes == null || bytes.length == 0) {
             return;
         }
-        AttachmentDto dto = attachmentUploader.upload(bytes, filename, mimeOverride, tenantId);
+        AttachmentDto dto = attachmentUploader.upload(bytes, filename, mimeOverride, tenantId, userId);
         if (dto != null) {
             out.add(dto);
         }

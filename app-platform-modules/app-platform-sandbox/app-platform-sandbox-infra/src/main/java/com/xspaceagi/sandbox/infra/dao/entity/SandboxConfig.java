@@ -61,6 +61,15 @@ public class SandboxConfig implements Serializable {
     @TableField(value = "max_agent")
     private Integer maxAgentCount;
 
+    @TableField(value = "bind_info")
+    private String bindInfo;
+
+    @TableField(value = "type")
+    private String type;
+
+    @TableField(value = "isolation")
+    private String isolation;
+
     @TableField(value = "created")
     private Date created;
 

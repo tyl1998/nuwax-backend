@@ -15,7 +15,8 @@ public interface WechatIlinkAttachmentService {
      * @param originalFilename 原始文件名
      * @param contentType 文件MIME类型
      * @param tenantId 租户ID（用于解析存储配置）
+     * @param userId 上传用户ID
      * @return 上传失败时返回 null
      */
-    AttachmentDto upload(byte[] bytes, String originalFilename, String contentType, Long tenantId);
+    AttachmentDto upload(byte[] bytes, String originalFilename, String contentType, Long tenantId, Long userId);
 }

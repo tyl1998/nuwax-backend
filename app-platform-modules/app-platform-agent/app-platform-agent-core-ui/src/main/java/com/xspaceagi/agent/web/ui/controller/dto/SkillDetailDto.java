@@ -3,6 +3,7 @@ package com.xspaceagi.agent.web.ui.controller.dto;
 import com.xspaceagi.agent.core.adapter.dto.PublishUserDto;
 import com.xspaceagi.agent.core.adapter.dto.StatisticsDto;
 import com.xspaceagi.agent.core.adapter.dto.SkillFileDto;
+import com.xspaceagi.agent.core.spec.enums.UsageScenarioEnum;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
@@ -30,6 +31,12 @@ public class SkillDetailDto implements Serializable {
 
     @Schema(description = "技能文件列表")
     private List<SkillFileDto> files;
+
+    @Schema(description = "扩展字段")
+    private Object ext;
+
+    @Schema(description = "适用场景列表，如 [TaskAgent, PageApp]")
+    private List<UsageScenarioEnum> usageScenarios;
 
     @Schema(description = "是否收藏")
     private boolean isCollect;

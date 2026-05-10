@@ -91,7 +91,7 @@ public class CustomPageConfigController extends BaseController {
 
             // 初始化项目
             ReqResult<Map<String, Object>> initResult = customPageBuildApplicationService
-                    .initProject(result.getData().getId(), userContext);
+                    .initProject(result.getData().getId(), req.getTemplateType(), userContext);
             log.info("[Web] project Id={},initialize project result,{}:{}, resp={}",
                     result.getData().getId(), initResult.getCode(), initResult.getMessage(), initResult.getData());
 
@@ -292,6 +292,7 @@ public class CustomPageConfigController extends BaseController {
             newConfigModel.setProxyConfigs(sourceConfig.getProxyConfigs());
             newConfigModel.setPageArgConfigs(sourceConfig.getPageArgConfigs());
             newConfigModel.setExt(sourceConfig.getExt());
+            newConfigModel.setSandboxId(sourceConfig.getSandboxId());
             newConfigModel.setSpaceId(targetSpaceId);
 
             ReqResult<CustomPageConfigModel> createResult = customPageConfigApplicationService.create(newConfigModel, userContext);

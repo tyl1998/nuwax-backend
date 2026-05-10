@@ -22,7 +22,7 @@ import java.util.List;
 public class DingtalkAttachmentService {
 
     @Resource
-    private FileUploadHelperService fileUploadHelperService;
+    private ImFileUploadHelper fileUploadHelperService;
 
     /**
      * 从钉钉消息中下载附件并上传到项目存储。
@@ -37,7 +37,8 @@ public class DingtalkAttachmentService {
     public FeishuAttachmentResultDto downloadAndUpload(DingtalkOpenApiClient apiClient,
                                                        List<DingtalkAttachmentCodeDto> attachmentCodes,
                                                        String robotCode, String robotCodeFallback,
-                                                       TenantConfigDto tenantConfig) {
+                                                       TenantConfigDto tenantConfig,
+                                                       Long uploadUserId) {
         FeishuAttachmentResultDto result = new FeishuAttachmentResultDto();
         if (attachmentCodes == null || attachmentCodes.isEmpty()) {
             return result;
@@ -67,12 +68,12 @@ public class DingtalkAttachmentService {
                 }
 
                 // 2. 确定文件名和检测文件类型
-                FileUploadHelperService.UploadResult uploadResult;
+                ImFileUploadHelper.UploadResult uploadResult;
 
                 if (StringUtils.isNotBlank(originalFileName)) {
                     // 如果有原始文件名，使用它
                     uploadResult = fileUploadHelperService.detectAndUploadByFileName(
-                        bytes, originalFileName, null, ImChannelEnum.DINGTALK, tenantConfig);
+                        bytes, originalFileName, null, ImChannelEnum.DINGTALK, tenantConfig, uploadUserId);
                 } else {
                     // 如果没有原始文件名，使用完整检测（基于内容）
                     uploadResult = fileUploadHelperService.detectAndUpload(
@@ -83,7 +84,8 @@ public class DingtalkAttachmentService {
                         "file",                  // 原始类型（钉钉附件都是 file 类型）
                         code,                    // 默认文件名（使用 downloadCode）
                         ImChannelEnum.DINGTALK, // IM 渠道类型
-                        tenantConfig
+                        tenantConfig,
+                        uploadUserId
                     );
                 }
 

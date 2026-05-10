@@ -21,6 +21,15 @@ public class CustomPageConversation {
 
     // 会话内容
     private String content;
+    
+    // 消息角色：USER/ASSISTANT
+    private String role;
+
+    // 会话ID
+    private String sessionId;
+
+    // 请求ID
+    private String requestId;
 
     @TableField(value = "_tenant_id")
     private Long tenantId;

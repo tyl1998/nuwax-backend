@@ -412,7 +412,7 @@ public enum BizExceptionCodeEnum implements IBizExceptionCodeEnum {
     agentTableSchemaQueryFailed("9223", "查询表结构定义失败", "Failed to query table schema.", "表结构"),
     agentTemplateConfigInvalid("9224", "该模版配置异常，暂时不可用", "This template configuration is invalid and temporarily unavailable.", "模版"),
     agentSandboxServerStoppedOrRemoved("9225", "关联的agent服务器已停止或已删除", "The associated agent server has stopped or been removed.", "沙箱/电脑"),
-    agentFileServerNotFound("9226", "未找到文件服务器", "File server not found.", "文件"),
+    agentSandboxNotFound("9226", "未找到沙盒服务器", "Sandbox server not found.", "沙箱/电脑"),
     agentPrivateComputerDeleteForbidden("9227", "私有电脑的智能体不允许在此删除", "Agents on a private computer cannot be deleted here.", "智能体"),
     agentKnowledgeIdInvalid("9228", "知识ID错误", "Invalid knowledge ID.", "参数"),
     agentPageIdInvalid("9229", "页面ID错误", "Invalid page ID.", "参数"),

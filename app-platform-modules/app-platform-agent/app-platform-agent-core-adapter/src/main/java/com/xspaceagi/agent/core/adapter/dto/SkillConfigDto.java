@@ -23,6 +23,9 @@ public class SkillConfigDto implements Serializable {
 
     private List<SkillFileDto> files; // 文件内容
 
+    @Schema(description = "扩展字段，例如 supportTaskAgent/supportPageApp")
+    private SkillExtDto ext;
+
     private Published.PublishStatus publishStatus; // 发布状态
 
     private Long spaceId; // 空间ID
@@ -50,4 +53,7 @@ public class SkillConfigDto implements Serializable {
 
     @Schema(description = "已发布的分类")
     private String category;
+
+    @Schema(description = "技能发布zip代理下载地址")
+    private String zipFileUrl;
 }

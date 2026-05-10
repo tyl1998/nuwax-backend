@@ -1,12 +1,23 @@
 package com.xspaceagi.system.application.util;
 
-import com.xspaceagi.system.spec.common.RequestContext;
+import com.xspaceagi.file.sdk.IFileAccessService;
 import com.xspaceagi.system.application.dto.TenantConfigDto;
+import com.xspaceagi.system.spec.common.RequestContext;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 import java.net.URLEncoder;
 
+@Component
 public class DefaultIconUrlUtil {
+
+    private static IFileAccessService iFileAccessService;
+
+    @Autowired
+    public void setIFileAccessService(IFileAccessService iFileAccessService) {
+        DefaultIconUrlUtil.iFileAccessService = iFileAccessService;
+    }
 
     public static String setDefaultIconUrl(String originalIcon, String name) {
         return setDefaultIconUrl(originalIcon, name, "default");
@@ -29,7 +40,7 @@ public class DefaultIconUrlUtil {
             } catch (Exception e) {
             }
         }
-        return originalIcon;
+        return iFileAccessService.getFileUrlWithAk(originalIcon, true);
     }
 
     public static String removeDefaultIconUrl(String url) {

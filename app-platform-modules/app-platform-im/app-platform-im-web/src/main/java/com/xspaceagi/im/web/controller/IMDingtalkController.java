@@ -208,7 +208,7 @@ public class IMDingtalkController {
             }
             var tenantConfig = tenantConfigApplicationService.getTenantConfig(config.getTenantId());
             var attachmentResult = dingtalkAttachmentService.downloadAndUpload(
-                    apiClient, attachmentCodes, robotCode, null, tenantConfig);
+                    apiClient, attachmentCodes, robotCode, null, tenantConfig, config.getUserId());
             attachments = attachmentResult.getAttachments();
             // 仅当全部附件下载失败时提示；有任一成功则只显示 [附件]
             if (!attachmentResult.getUnsupportedKeys().isEmpty() && attachmentResult.getAttachments().isEmpty()) {
@@ -495,7 +495,11 @@ public class IMDingtalkController {
     }
 
     private static boolean isNewCommand(String userMessage) {
-        return "/new".equals(StringUtils.trimToEmpty(userMessage));
+        String normalized = StringUtils.trimToEmpty(userMessage)
+                .replace('\u00A0', ' ')
+                .replaceAll("^(?:@[^\\s]+\\s*)+", "")
+                .trim();
+        return "/new".equals(normalized);
     }
 
     private void createNewConversationForDingtalk(String senderId, String conversationType, String conversationId,

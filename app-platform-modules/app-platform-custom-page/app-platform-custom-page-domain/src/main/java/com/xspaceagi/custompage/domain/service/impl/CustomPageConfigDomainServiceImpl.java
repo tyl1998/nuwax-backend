@@ -38,6 +38,7 @@ import com.xspaceagi.custompage.domain.proxypath.ICustomPageProxyPathService;
 import com.xspaceagi.custompage.domain.repository.ICustomPageBuildRepository;
 import com.xspaceagi.custompage.domain.repository.ICustomPageConfigRepository;
 import com.xspaceagi.custompage.domain.service.ICustomPageConfigDomainService;
+import com.xspaceagi.custompage.domain.service.ICustomPageConversationDomainService;
 import com.xspaceagi.system.sdk.permission.SpacePermissionService;
 
 import jakarta.annotation.Resource;
@@ -65,6 +66,8 @@ public class CustomPageConfigDomainServiceImpl implements ICustomPageConfigDomai
     private ICustomPageBuildRepository customPageBuildRepository;
     @Resource
     private ICustomPageProxyPathService customPageProxyPathService;
+    @Resource
+    private ICustomPageConversationDomainService customPageConversationDomainService;
 
     @Override
     public ReqResult<CustomPageConfigModel> create(CustomPageConfigModel model, UserContext userContext) {
@@ -932,6 +935,8 @@ public class CustomPageConfigDomainServiceImpl implements ICustomPageConfigDomai
         customPageConfigRepository.deleteById(projectId, userContext);
         // 删除build
         customPageBuildRepository.deleteByProjectId(projectId, userContext);
+        // 删除会话记录
+        customPageConversationDomainService.deleteByProjectId(projectId, userContext);
 
         log.info("[Domain] delete projectsucceeded, project Id={}", projectId);
         Map<String, Object> map = new HashMap<>();

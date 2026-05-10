@@ -1,5 +1,6 @@
 package com.xspaceagi.agent.core.adapter.dto;
 
+import com.xspaceagi.agent.core.adapter.dto.config.AgentConfigDto;
 import com.xspaceagi.agent.core.adapter.dto.config.Arg;
 import com.xspaceagi.agent.core.adapter.dto.config.bind.EventBindConfigDto;
 import com.xspaceagi.agent.core.adapter.repository.entity.AgentConfig;
@@ -108,6 +109,9 @@ public class AgentDetailDto implements Serializable {
 
     @Schema(description = "扩展页面首页")
     private String pageHomeIndex;
+
+    @Schema(description = "扩展页面菜单")
+    private List<AgentConfigDto.CustomPageMenu> customPageMenus;
 
     @Schema(description = "事件绑定配置")
     private EventBindConfigDto eventBindConfig;

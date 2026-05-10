@@ -1,5 +1,6 @@
 package com.xspaceagi.sandbox.infra.network;
 
+import cn.hutool.core.collection.ConcurrentHashSet;
 import com.alibaba.fastjson2.JSON;
 import com.xspaceagi.sandbox.infra.dao.entity.SandboxConfig;
 import com.xspaceagi.sandbox.infra.dao.service.SandboxConfigService;
@@ -20,6 +21,7 @@ import java.net.URL;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
 
 import static com.xspaceagi.sandbox.infra.network.ProxyChannelManager.*;
 
@@ -30,6 +32,8 @@ import static com.xspaceagi.sandbox.infra.network.ProxyChannelManager.*;
 public class ServerChannelHandler extends SimpleChannelInboundHandler<ProxyMessage> {
 
     private static final Logger logger = LoggerFactory.getLogger(ServerChannelHandler.class);
+
+    private static final Set<String> authLockSet = new ConcurrentHashSet<>();
 
     private final SandboxConfigService sandboxConfigService;
 
@@ -48,7 +52,15 @@ public class ServerChannelHandler extends SimpleChannelInboundHandler<ProxyMessa
                 handleHeartbeatMessage(ctx, proxyMessage);
                 break;
             case ProxyMessage.C_TYPE_AUTH:
-                handleAuthMessage(ctx, proxyMessage);
+                try {
+                    if (!authLockSet.add(proxyMessage.getUri())) {
+                        ctx.channel().close();
+                        return;
+                    }
+                    handleAuthMessage(ctx, proxyMessage);
+                } finally {
+                    authLockSet.remove(proxyMessage.getUri());
+                }
                 break;
             case ProxyMessage.TYPE_CONNECT:
                 handleConnectMessage(ctx, proxyMessage);
@@ -181,6 +193,7 @@ public class ServerChannelHandler extends SimpleChannelInboundHandler<ProxyMessa
         if (channel != null) {
             logger.warn("exist channel for key {}, {}", clientKey, channel);
             ctx.channel().close();
+            channel.close();
             return;
         }
         SandboxConfigValue configValue = JSON.parseObject(sandboxConfig.getConfigValue(), SandboxConfigValue.class);
@@ -193,9 +206,9 @@ public class ServerChannelHandler extends SimpleChannelInboundHandler<ProxyMessa
         Integer vncInnerPort = null;
         Integer fileServerPort = null;
         try {
-            agentInnerPort = reverseServerContainer.getPortPoolManager().borrow();
-            vncInnerPort = reverseServerContainer.getPortPoolManager().borrow();
-            fileServerPort = reverseServerContainer.getPortPoolManager().borrow();
+            agentInnerPort = acquireUserPort();
+            vncInnerPort = acquireUserPort();
+            fileServerPort = acquireUserPort();
 
             URL url;
             try {
@@ -209,9 +222,6 @@ public class ServerChannelHandler extends SimpleChannelInboundHandler<ProxyMessa
             ProxyChannelManager.addPortLanInfo(agentInnerPort, url.getHost() + ":" + configValue.getAgentPort(), false);
             ProxyChannelManager.addPortLanInfo(vncInnerPort, url.getHost() + ":" + configValue.getVncPort(), false);//后续支持直连vnc
             ProxyChannelManager.addPortLanInfo(fileServerPort, url.getHost() + ":" + configValue.getFileServerPort(), false);
-            reverseServerContainer.startUserPort(reverseServerContainer.getReverseServerProperties().getInner().getBindHost(), agentInnerPort);
-            reverseServerContainer.startUserPort(reverseServerContainer.getReverseServerProperties().getInner().getBindHost(), vncInnerPort);
-            reverseServerContainer.startUserPort(reverseServerContainer.getReverseServerProperties().getInner().getBindHost(), fileServerPort);
 
             String innerHost = reverseServerContainer.getReverseServerProperties().getInner().getServiceHost();
             SandboxServerInfo sandboxServerInfo = new SandboxServerInfo();
@@ -244,6 +254,29 @@ public class ServerChannelHandler extends SimpleChannelInboundHandler<ProxyMessa
             logger.warn("error get port for key {}, {}", clientKey, ctx.channel(), e);
             ctx.channel().close();
         }
+    }
+
+    // acquire user port
+    private Integer acquireUserPort() throws Exception {
+        Integer port = null;
+        int i = 0;
+        while (i < 10) {
+            port = reverseServerContainer.getPortPoolManager().borrow();
+            boolean bind = reverseServerContainer.startUserPort(reverseServerContainer.getReverseServerProperties().getInner().getBindHost(), port);
+            if (!bind) {
+                logger.warn("port {} bind failed", port);
+                reverseServerContainer.getPortPoolManager().release(port);
+                port = null;
+            } else {
+                break;
+            }
+            i++;
+        }
+        if (port == null) {
+            logger.warn("acquire port failed");
+            throw new RuntimeException("acquire port failed");
+        }
+        return port;
     }
 
     @Override

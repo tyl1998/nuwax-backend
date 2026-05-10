@@ -3,6 +3,7 @@ package com.xspaceagi.agent.core.infra.component.knowledge;
 import com.xspaceagi.agent.core.infra.component.BaseComponent;
 import com.xspaceagi.agent.core.infra.component.knowledge.dto.QueryText;
 import com.xspaceagi.agent.core.spec.enums.SearchStrategyEnum;
+import com.xspaceagi.file.sdk.IFileAccessService;
 import com.xspaceagi.knowledge.sdk.request.KnowledgeFullTextSearchRequestVo;
 import com.xspaceagi.knowledge.sdk.request.KnowledgeQaRequestVo;
 import com.xspaceagi.knowledge.sdk.response.KnowledgeFullTextSearchResponseVo;
@@ -12,7 +13,6 @@ import com.xspaceagi.knowledge.sdk.response.KnowledgeQaVo;
 import com.xspaceagi.knowledge.sdk.sevice.IKnowledgeFullTextSearchRpcService;
 import com.xspaceagi.knowledge.sdk.sevice.IKnowledgeQaSearchRpcService;
 import com.xspaceagi.system.spec.tenant.thread.TenantFunctions;
-import com.xspaceagi.system.spec.utils.FileAkUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -31,7 +31,7 @@ public class KnowledgeBaseSearcher extends BaseComponent {
 
     private IKnowledgeFullTextSearchRpcService knowledgeFullTextSearchRpcService;
 
-    private FileAkUtil fileAkUtil;
+    private IFileAccessService iFileAccessService;
 
     @Autowired
     public void setKnowledgeQaSearchRpcService(IKnowledgeQaSearchRpcService knowledgeQaSearchRpcService) {
@@ -44,8 +44,8 @@ public class KnowledgeBaseSearcher extends BaseComponent {
     }
 
     @Autowired
-    public void setFileAkUtil(FileAkUtil fileAkUtil) {
-        this.fileAkUtil = fileAkUtil;
+    public void setIFileAccessService(IFileAccessService iFileAccessService) {
+        this.iFileAccessService = iFileAccessService;
     }
 
     public Mono<List<KnowledgeQaVo>> search(SearchContext searchContext) {
@@ -161,15 +161,8 @@ public class KnowledgeBaseSearcher extends BaseComponent {
         if (text != null) {
             List<String> urls = extractUrls(text);
             for (String url : urls) {
-                if (url.contains("/api/file")) {
-                    String url0 = url;
-                    if (url.contains("ak=")) {
-                        //删除ak
-                        url0 = url.substring(0, url.indexOf("ak="));
-                    }
-                    String fileUrlWithAk = fileAkUtil.getFileUrlWithAk(url0);
-                    text = text.replace(url, fileUrlWithAk);
-                }
+                String fileUrlWithAk = iFileAccessService.getFileUrlWithAk(url);
+                text = text.replace(url, fileUrlWithAk);
             }
         }
 

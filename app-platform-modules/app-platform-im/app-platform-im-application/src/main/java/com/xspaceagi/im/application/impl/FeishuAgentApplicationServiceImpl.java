@@ -114,7 +114,7 @@ public class FeishuAgentApplicationServiceImpl implements FeishuAgentApplication
             return AgentExecuteResultWithConv.builder().text(out).conversationId(conversationId).agentId(agentId).build();
         } catch (Exception e) {
             log.error("Feishu agent error: sessionId={}", sessionId, e);
-            String err = "模型执行异常: " + (e.getMessage() != null ? e.getMessage() : "未知错误");
+            String err = e.getMessage() != null ? e.getMessage() : "模型执行异常";
             return AgentExecuteResultWithConv.builder().text(err).conversationId(null).agentId(agentId).build();
         } finally {
             RequestContext.remove();

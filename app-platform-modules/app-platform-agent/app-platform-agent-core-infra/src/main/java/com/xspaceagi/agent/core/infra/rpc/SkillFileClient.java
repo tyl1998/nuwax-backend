@@ -15,6 +15,7 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -28,16 +29,19 @@ public class SkillFileClient {
         SandboxServerConfig.SandboxServer sandboxServer = null;
         try {
             sandboxServer = sandboxServerConfigService.selectServer(cId);
+        } catch (BizException e) {
+            log.warn("[Skill-client] selectServer failed cId={}", cId, e);
+            throw e;
         } catch (Exception e) {
-            log.warn("[SkillFileClient] selectServer failed cId={}", cId, e);
-            throw BizException.of(BizExceptionCodeEnum.agentDependencyServiceError);
+            log.warn("[Skill-client] selectServer failed cId={}", cId, e);
+            throw new BizException(e.getMessage());
         }
         if (sandboxServer == null) {
-            return null;
+            throw BizException.of(BizExceptionCodeEnum.agentSandboxNotFound);
         }
         String serverUrl = sandboxServer.getServerFileUrl();
         if (serverUrl == null) {
-            throw BizException.of(BizExceptionCodeEnum.agentFileServerNotFound);
+            throw BizException.of(BizExceptionCodeEnum.agentSandboxNotFound);
         }
         return serverUrl + "/api";
     }
@@ -59,7 +63,6 @@ public class SkillFileClient {
         if (file != null) {
             body.add("file", file.getResource());
         }
-
         HttpEntity<LinkedMultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
 
         RestTemplate restTemplate = new RestTemplate();
@@ -71,6 +74,42 @@ public class SkillFileClient {
             return responseBody;
         } catch (HttpClientErrorException e) {
             log.warn("[Skill-client] userId={} cId={} 创建工作空间失败, status={}, responseBody={}", userId, cId, e.getStatusCode(), e.getResponseBodyAsString());
+            return parseClientErr(userId + "_" + cId, e);
+        }
+    }
+
+    /**
+     * 创建工作空间v2
+     */
+    public Map<String, Object> createWorkSpaceV2(Long userId, Long cId, MultipartFile file, List<String> skillUrls) {
+        String url = getBaseUrl(cId) + "/computer/create-workspace-v2";
+        log.info("[Skill-client] userId={} cId={} , url={}", userId, cId, url);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+
+        // 创建MultiValueMap来存储文件和其他参数
+        LinkedMultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+        body.add("userId", String.valueOf(userId));
+        body.add("cId", String.valueOf(cId));
+        if (file != null) {
+            body.add("file", file.getResource());
+        }
+        if (skillUrls != null && !skillUrls.isEmpty()) {
+            body.add("skillUrls", skillUrls);
+        }
+
+        HttpEntity<LinkedMultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
+
+        RestTemplate restTemplate = new RestTemplate();
+        try {
+            ResponseEntity<Map<String, Object>> entity = restTemplate.exchange(url, HttpMethod.POST, requestEntity, new ParameterizedTypeReference<Map<String, Object>>() {
+            });
+            Map<String, Object> responseBody = entity.getBody();
+            log.info("[Skill-client] userId={} cId={} 创建工作空间v2, 响应结果={}", userId, cId, responseBody);
+            return responseBody;
+        } catch (HttpClientErrorException e) {
+            log.warn("[Skill-client] userId={} cId={} 创建工作空间v2失败, status={}, responseBody={}", userId, cId, e.getStatusCode(), e.getResponseBodyAsString());
             return parseClientErr(userId + "_" + cId, e);
         }
     }
@@ -94,7 +133,6 @@ public class SkillFileClient {
         body.add("userId", String.valueOf(userId));
         body.add("cId", String.valueOf(cId));
         body.add("file", zipFile.getResource());
-
         HttpEntity<LinkedMultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
 
         RestTemplate restTemplate = new RestTemplate();
@@ -106,6 +144,46 @@ public class SkillFileClient {
             return responseBody;
         } catch (HttpClientErrorException e) {
             log.warn("[Skill-client] userId={} cId={} 调用推送技能文件失败, status={}, responseBody={}", userId, cId, e.getStatusCode(), e.getResponseBodyAsString());
+            return parseClientErr(userId + "_" + cId, e);
+        }
+    }
+
+    /**
+     * 推送skill到空间
+     * zip 结构与 create-workspace 一致，包含 skills/ 目录
+     */
+    public Map<String, Object> pushSkillsToWorkspaceV2(Long userId, Long cId, MultipartFile zipFile, List<String> skillUrls) {
+        if (zipFile == null && (skillUrls == null || skillUrls.isEmpty())) {
+            throw new IllegalArgumentException("No skill files to push");
+        }
+
+        String url = getBaseUrl(cId) + "/computer/push-skills-to-workspace-v2";
+        log.info("[Skill-client] userId={} cId={}, url={}", userId, cId, url);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+
+        LinkedMultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+        body.add("userId", String.valueOf(userId));
+        body.add("cId", String.valueOf(cId));
+        if (zipFile != null) {
+            body.add("file", zipFile.getResource());
+        }
+        if (skillUrls != null && !skillUrls.isEmpty()) {
+            body.add("skillUrls", skillUrls);
+        }
+
+        HttpEntity<LinkedMultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
+
+        RestTemplate restTemplate = new RestTemplate();
+        try {
+            ResponseEntity<Map<String, Object>> entity = restTemplate.exchange(url, HttpMethod.POST, requestEntity, new ParameterizedTypeReference<Map<String, Object>>() {
+            });
+            Map<String, Object> responseBody = entity.getBody();
+            log.info("[Skill-client] userId={} cId={} 推送技能文件v2, 响应结果={}", userId, cId, responseBody);
+            return responseBody;
+        } catch (HttpClientErrorException e) {
+            log.warn("[Skill-client] userId={} cId={} 调用推送技能文件v2失败, status={}, responseBody={}", userId, cId, e.getStatusCode(), e.getResponseBodyAsString());
             return parseClientErr(userId + "_" + cId, e);
         }
     }

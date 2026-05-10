@@ -12,6 +12,9 @@ import lombok.Data;
 @Schema(description = "Conversation record response")
 public class ConversationRes {
 
+    @Schema(description = "Database ID")
+    private Long id;
+
     @Schema(description = "Project ID")
     private Long projectId;
 
@@ -23,6 +26,15 @@ public class ConversationRes {
 
     @Schema(description = "Conversation content")
     private String content;
+
+    @Schema(description = "Message role: USER / ASSISTANT")
+    private String role;
+
+    @Schema(description = "Session ID")
+    private String sessionId;
+
+    @Schema(description = "Request ID")
+    private String requestId;
 
     @Schema(description = "Created time")
     private Date created;

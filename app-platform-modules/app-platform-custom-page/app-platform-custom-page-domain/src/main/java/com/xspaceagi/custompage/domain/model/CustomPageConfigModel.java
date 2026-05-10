@@ -46,6 +46,8 @@ public class CustomPageConfigModel {
 
     private List<DataSourceDto> dataSources;
 
+    private Long sandboxId;
+
     private Object ext;
 
     private Long tenantId;

@@ -106,9 +106,9 @@ public class CustomPageChatApplicationServiceImpl implements ICustomPageChatAppl
     }
 
     @Override
-    public SseEmitter startAgentSessionSse(String sessionId, UserContext userContext) {
+    public SseEmitter startAgentSessionSse(String sessionId, Long projectId, UserContext userContext) {
         log.info("[Application] establish session SSE,session Id={}", sessionId);
-        return customPageChatDomainService.startAgentSessionSse(sessionId, userContext);
+        return customPageChatDomainService.startAgentSessionSse(sessionId, projectId, userContext);
     }
 
     @Override

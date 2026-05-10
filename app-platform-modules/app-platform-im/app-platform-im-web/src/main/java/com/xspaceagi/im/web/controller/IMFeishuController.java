@@ -542,7 +542,7 @@ public class IMFeishuController {
             var tenantConfig = tenantConfigApplicationService.getTenantConfig(botConfig.getTenantId());
             var attachmentResult = feishuAttachmentService.downloadAndUpload(
                     botConfig.getAppId(), botConfig.getAppSecret(), messageId,
-                    fileKeys, types, tenantConfig);
+                    fileKeys, types, tenantConfig, botConfig.getUserId());
             attachments = attachmentResult.getAttachments();
             unsupportedKeys = attachmentResult.getUnsupportedKeys();
         }
@@ -834,7 +834,11 @@ public class IMFeishuController {
     }
 
     private static boolean isNewCommand(String userMessage) {
-        return "/new".equals(StringUtils.trimToEmpty(userMessage));
+        String normalized = StringUtils.trimToEmpty(userMessage)
+                .replace('\u00A0', ' ')
+                .replaceAll("^(?:@[^\\s]+\\s*)+", "")
+                .trim();
+        return "/new".equals(normalized);
     }
 
     private void createNewConversationForFeishu(String sessionId, String chatType, String sessionName, FeishuBotConfig botConfig) {

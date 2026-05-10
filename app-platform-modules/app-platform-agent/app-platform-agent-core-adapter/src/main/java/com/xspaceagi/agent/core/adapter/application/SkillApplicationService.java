@@ -39,6 +39,11 @@ public interface SkillApplicationService {
     SkillConfigDto queryPublishedSkillConfig(Long skillId, Long spaceId, boolean loadFiles);
 
     /**
+     * 解析已发布技能配置（兼容新旧格式）
+     */
+    SkillConfigDto parsePublishedSkillConfig(String config, Object ext);
+
+    /**
      * 查询用户相关的已发布的技能，过滤掉没有权限的技能
      */
     List<SkillConfigDto> queryUserRelatedPublishedSkillConfigs(Long userId, List<Long> skillIds);
@@ -61,7 +66,7 @@ public interface SkillApplicationService {
     /**
      * 导入技能
      */
-    Long importSkill(MultipartFile file, SkillConfigDto existSkill, Long targetSpaceId);
+    Long importSkill(MultipartFile file, SkillConfigDto existSkill, Long targetSpaceId, SkillExtDto ext);
 
     /**
      * 复制技能
@@ -79,10 +84,9 @@ public interface SkillApplicationService {
     void checkSpaceSkillPermission(Long spaceId, Long skillId);
 
     /**
-     * 处理上传的文件，将文件内容转换为 SkillFileDto
-     * 如果是二进制文件则转换为 base64，文本文件则直接读取
+     * 处理上传的文件并上传到文件服务，返回文件索引
      */
-    SkillFileDto processUploadFile(MultipartFile file, String filePath);
+    SkillFileDto processUploadFile(MultipartFile file, String filePath, Long skillId);
 
     /**
      * 记录最近使用的技能

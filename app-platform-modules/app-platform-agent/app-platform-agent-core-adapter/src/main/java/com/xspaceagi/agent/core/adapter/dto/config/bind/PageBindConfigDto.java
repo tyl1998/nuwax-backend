@@ -22,4 +22,10 @@ public class PageBindConfigDto implements Serializable {
 
     @Schema(description = "是否为智能体页面首页，1 为默认首页，0 不为首页")
     private Integer homeIndex;
+
+    @Schema(description = "页面名称")
+    private String pageName;
+
+    @Schema(description = "页面图标")
+    private String pageIcon;
 }

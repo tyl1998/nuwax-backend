@@ -32,6 +32,11 @@
             <artifactId>system-application</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>com.xspaceagi</groupId>
+            <artifactId>app-platform-file-application</artifactId>
+        </dependency>
+
         <!-- 飞书 -->
         <dependency>
             <groupId>com.larksuite.oapi</groupId>
@@ -44,13 +49,6 @@
             <groupId>com.github.binarywang</groupId>
             <artifactId>weixin-java-cp</artifactId>
             <version>4.8.0</version>
-        </dependency>
-
-        <!-- 腾讯云 -->
-        <dependency>
-            <groupId>com.qcloud</groupId>
-            <artifactId>cos_api</artifactId>
-            <version>5.6.227</version>
         </dependency>
     </dependencies>
 </project>

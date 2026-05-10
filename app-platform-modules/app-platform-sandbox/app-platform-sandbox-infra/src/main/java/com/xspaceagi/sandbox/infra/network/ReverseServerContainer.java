@@ -158,7 +158,7 @@ public class ReverseServerContainer {
         }
     }
 
-    public void startUserPort(String host, Integer port) {
+    public boolean startUserPort(String host, Integer port) {
         Assert.notNull(port, "port must not be null");
         try {
             ChannelFuture future = clientBootstrap.bind(port);
@@ -171,7 +171,10 @@ public class ReverseServerContainer {
                 logger.error("An interruptedException was caught while initializing server", ex);
                 throw new RuntimeException(ex);
             }
+            logger.warn("bind port {} error", port, ex);
+            return false;
         }
+        return true;
     }
 
     public void releaseUserPort(Integer port) {

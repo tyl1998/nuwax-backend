@@ -6,10 +6,21 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.function.BiConsumer;
 
-import org.springframework.beans.factory.annotation.Value;
+import com.xspaceagi.custompage.domain.model.CustomPageConfigModel;
+import com.xspaceagi.custompage.domain.repository.ICustomPageConfigRepository;
+import com.xspaceagi.sandbox.sdk.server.ISandboxConfigRpcService;
+import com.xspaceagi.sandbox.sdk.service.dto.SandboxConfigRpcDto;
+import com.xspaceagi.sandbox.sdk.service.dto.SandboxConfigValue;
+import com.xspaceagi.system.spec.common.UserContext;
+import jakarta.annotation.Resource;
+import lombok.AllArgsConstructor;
+import lombok.Data;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -26,9 +37,22 @@ import org.springframework.web.util.UriComponentsBuilder;
 @Slf4j
 @Component
 public class AiAgentClient {
+    @Value("${custom-page.ai-agent.base-url:}")
+    private String configuredBaseUrl;
+    @Resource
+    private ICustomPageConfigRepository customPageConfigRepository;
+    @Resource
+    private ISandboxConfigRpcService sandboxConfigRpcService;
 
-    @Value("${custom-page.ai-agent.base-url}")
-    private String baseUrl;
+    @Data
+    @AllArgsConstructor
+    public static class AgentRuntimeContext {
+        private final String baseUrl;
+        private final Long tenantId;
+        private final Long spaceId;
+        private final String isolationType;
+        private final String podId;
+    }
 
     private RestTemplate createRestTemplate() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
@@ -37,14 +61,16 @@ public class AiAgentClient {
         return new RestTemplate(factory);
     }
 
-    public Map<String, Object> sendChat(Map<String, Object> chatBody) {
-        String url = baseUrl + "/chat";
-        log.info("[Infra] call AI Agent /chat, url={}", url);
+    public Map<String, Object> sendChat(Map<String, Object> chatBody, Long projectId, UserContext userContext) {
+        AgentRuntimeContext runtimeContext = buildAgentRuntimeContext(projectId, userContext);
+        String url = buildBaseUrl(runtimeContext) + "/chat";
+        Map<String, Object> requestBody = appendRuntimeParamsToBody(chatBody, runtimeContext);
+        log.info("[Infra] call AI Agent /chat, url={}, request={}", url, requestBody);
         RestTemplate restTemplate = createRestTemplate();
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(chatBody, headers);
+        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
 
         ResponseEntity<Map<String, Object>> entity = restTemplate.exchange(
                 url,
@@ -57,12 +83,14 @@ public class AiAgentClient {
         return body;
     }
 
-    public void subscribeSessionSse(String sessionId, SseEmitter emitter) {
+    public void subscribeSessionSse(String sessionId, SseEmitter emitter, Long projectId, UserContext userContext,
+            BiConsumer<String, String> eventConsumer) {
+        AgentRuntimeContext runtimeContext = buildAgentRuntimeContext(projectId, userContext);
         // 在异步线程中订阅 SSE
         new Thread(() -> {
             HttpURLConnection connection = null;
             try {
-                String urlStr = baseUrl + "/agent/progress/" + sessionId;
+                String urlStr = appendRuntimeParams(UriComponentsBuilder.fromHttpUrl(buildBaseUrl(runtimeContext) + "/agent/progress/" + sessionId), runtimeContext).toUriString();
                 log.info("[Infra] start subscribing to AI Agent SSE, url={}", urlStr);
                 URL url = new URL(urlStr);
                 connection = (HttpURLConnection) url.openConnection();
@@ -107,6 +135,9 @@ public class AiAgentClient {
                                         eventBuilder.name(eventName);
                                     }
                                     eventBuilder.data(dataBuilder.toString());
+                                    if (eventConsumer != null) {
+                                        eventConsumer.accept(eventName, dataBuilder.toString());
+                                    }
                                     emitter.send(eventBuilder);
                                 } catch (Exception sendEx) {
                                     if (isClientDisconnected(sendEx)) {
@@ -146,18 +177,26 @@ public class AiAgentClient {
         return lowerMsg.contains("broken pipe") || lowerMsg.contains("connection reset");
     }
 
-    public Map<String, Object> sessionCancel(String projectId, String sessionId) {
-        UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(baseUrl + "/agent/session/cancel")
-                .queryParam("project_id", projectId);
+    public Map<String, Object> sessionCancel(Long projectId, String sessionId, UserContext userContext) {
+        AgentRuntimeContext runtimeContext = buildAgentRuntimeContext(projectId, userContext);
+        UriComponentsBuilder urlBuilder = UriComponentsBuilder.fromHttpUrl(buildBaseUrl(runtimeContext) + "/agent/session/cancel").queryParam("project_id", projectId);
         if (sessionId != null && !sessionId.isBlank()) {
-            builder = builder.queryParam("session_id", sessionId);
+            urlBuilder = urlBuilder.queryParam("session_id", sessionId);
         }
-        String url = builder.toUriString();
+        String url = appendRuntimeParams(urlBuilder, runtimeContext).toUriString();
         log.info("[Infra] callcancel agent task API, url={}, project Id={}, session Id={}", url, projectId, sessionId);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        HttpEntity<Void> requestEntity = new HttpEntity<>(headers);
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("project_id", String.valueOf(projectId));
+        if (sessionId != null && !sessionId.isBlank()) {
+            requestBody.put("session_id", sessionId);
+        }
+        Map<String, Object> finalRequestBody = appendRuntimeParamsToBody(requestBody, runtimeContext);
+        log.info("[Infra] callcancel agent task API, request={}", finalRequestBody);
+        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(
+                finalRequestBody, headers);
 
         RestTemplate restTemplate = createRestTemplate();
         ResponseEntity<Map<String, Object>> entity = restTemplate.exchange(
@@ -171,8 +210,9 @@ public class AiAgentClient {
         return body;
     }
 
-    public Map<String, Object> getAgentStatus(String projectId) {
-        String url = baseUrl + "/agent/status/" + projectId;
+    public Map<String, Object> getAgentStatus(Long projectId, UserContext userContext) {
+        AgentRuntimeContext runtimeContext = buildAgentRuntimeContext(projectId, userContext);
+        String url = appendRuntimeParams(UriComponentsBuilder.fromHttpUrl(buildBaseUrl(runtimeContext) + "/agent/status/" + projectId), runtimeContext).toUriString();
         log.info("[Infra] callquery Agent status API, url={}, project Id={}", url, projectId);
         RestTemplate restTemplate = createRestTemplate();
 
@@ -191,14 +231,21 @@ public class AiAgentClient {
         return body;
     }
 
-    public Map<String, Object> stopAgent(String projectId) {
-        String url = baseUrl + "/agent/stop?project_id=" + projectId;
+    public Map<String, Object> stopAgent(Long projectId, UserContext userContext) {
+        AgentRuntimeContext runtimeContext = buildAgentRuntimeContext(projectId, userContext);
+        String url = appendRuntimeParams(
+                UriComponentsBuilder.fromHttpUrl(buildBaseUrl(runtimeContext) + "/agent/stop").queryParam("project_id", projectId), runtimeContext).toUriString();
         log.info("[Infra] callstop Agent service API, url={}, project Id={}", url, projectId);
         RestTemplate restTemplate = createRestTemplate();
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        HttpEntity<Void> requestEntity = new HttpEntity<>(headers);
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("project_id", String.valueOf(projectId));
+        Map<String, Object> finalRequestBody = appendRuntimeParamsToBody(requestBody, runtimeContext);
+        log.info("[Infra] callstop Agent service API, request={}", finalRequestBody);
+        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(
+                finalRequestBody, headers);
 
         ResponseEntity<Map<String, Object>> entity = restTemplate.exchange(
                 url,
@@ -210,4 +257,90 @@ public class AiAgentClient {
         log.info("[Infra] callstop Agent service API, response={}", body);
         return body;
     }
+
+    private AgentRuntimeContext buildAgentRuntimeContext(Long projectId, UserContext userContext) {
+        CustomPageConfigModel configModel = customPageConfigRepository.getById(projectId);
+        if (configModel == null) {
+            throw new IllegalArgumentException("Project configuration does not exist");
+        }
+        Long sandboxId = configModel.getSandboxId();
+        if (sandboxId == null) {
+            // 兼容老项目：未绑定 sandboxId 时，走配置文件中的 AI Agent 地址，且不透传 runtime 参数
+            return null;
+        }
+        SandboxConfigRpcDto sandboxConfig = sandboxConfigRpcService.selectAppDevelopmentSandbox(
+                userContext.getTenantId(),
+                userContext.getUserId(),
+                configModel.getSpaceId(),
+                projectId,
+                sandboxId);
+        if (sandboxConfig == null) {
+            throw new IllegalStateException("No available sandbox, sandboxId:" + sandboxId);
+        }
+        SandboxConfigValue configValue = sandboxConfig.getConfigValue();
+        if (configValue == null || configValue.getHostWithScheme() == null || configValue.getHostWithScheme().isBlank()
+                || configValue.getAgentPort() <= 0) {
+            throw new IllegalStateException("Sandbox config is incomplete, sandboxId:" + sandboxId);
+        }
+
+        String baseUrl = configValue.getHostWithScheme() + ":" + configValue.getAgentPort();
+        String isolationType = sandboxConfig.getIsolation() == null ? null : sandboxConfig.getIsolation().name();
+        String podId = sandboxConfig.getIsolationKey();
+        return new AgentRuntimeContext(baseUrl, userContext.getTenantId(), configModel.getSpaceId(), isolationType, podId);
+    }
+
+    private UriComponentsBuilder appendRuntimeParams(UriComponentsBuilder builder, AgentRuntimeContext runtimeContext) {
+        if (runtimeContext == null) {
+            return builder;
+        }
+        if (runtimeContext.getTenantId() != null) {
+            builder.queryParam("tenant_id", runtimeContext.getTenantId());
+        }
+        if (runtimeContext.getSpaceId() != null) {
+            builder.queryParam("space_id", runtimeContext.getSpaceId());
+        }
+        if (runtimeContext.getIsolationType() != null && !runtimeContext.getIsolationType().isBlank()) {
+            builder.queryParam("isolation_type", runtimeContext.getIsolationType());
+        }
+        if (runtimeContext.getPodId() != null && !runtimeContext.getPodId().isBlank()) {
+            builder.queryParam("pod_id", runtimeContext.getPodId());
+        }
+        return builder;
+    }
+
+    private Map<String, Object> appendRuntimeParamsToBody(Map<String, Object> body, AgentRuntimeContext runtimeContext) {
+        Map<String, Object> requestBody = body == null ? new HashMap<>() : new HashMap<>(body);
+        if (runtimeContext == null) {
+            return requestBody;
+        }
+        if (runtimeContext.getTenantId() != null) {
+            requestBody.put("tenant_id", runtimeContext.getTenantId());
+        }
+        if (runtimeContext.getSpaceId() != null) {
+            requestBody.put("space_id", runtimeContext.getSpaceId());
+        }
+        if (runtimeContext.getIsolationType() != null && !runtimeContext.getIsolationType().isBlank()) {
+            requestBody.put("isolation_type", runtimeContext.getIsolationType());
+        }
+        if (runtimeContext.getPodId() != null && !runtimeContext.getPodId().isBlank()) {
+            requestBody.put("pod_id", runtimeContext.getPodId());
+        }
+        return requestBody;
+    }
+
+    private String buildBaseUrl(AgentRuntimeContext runtimeContext) {
+        String baseUrl = runtimeContext == null ? null : runtimeContext.getBaseUrl();
+        if (baseUrl == null || baseUrl.isBlank()) {
+            baseUrl = configuredBaseUrl;
+        }
+        if (baseUrl == null || baseUrl.isBlank()) {
+            throw new IllegalArgumentException("AI Agent baseUrl is required");
+        }
+        String url = baseUrl.trim();
+        while (url.endsWith("/")) {
+            url = url.substring(0, url.length() - 1);
+        }
+        return url;
+    }
+
 }

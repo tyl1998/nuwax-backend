@@ -25,5 +25,9 @@
             <groupId>com.xspaceagi</groupId>
             <artifactId>app-platform-eco-market-sdk</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.xspaceagi</groupId>
+            <artifactId>app-platform-sandbox-sdk</artifactId>
+        </dependency>
     </dependencies>
 </project>

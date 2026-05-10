@@ -18,6 +18,7 @@ import com.xspaceagi.custompage.domain.repository.ICustomPageConfigRepository;
 import com.xspaceagi.custompage.domain.service.ICustomPageBuildDomainService;
 import com.xspaceagi.custompage.domain.service.ICustomPageConfigDomainService;
 import com.xspaceagi.custompage.sdk.dto.PublishTypeEnum;
+import com.xspaceagi.custompage.sdk.dto.TemplateTypeEnum;
 import com.xspaceagi.custompage.sdk.dto.VersionInfoDto;
 import com.xspaceagi.custompage.sdk.enums.CustomPageActionEnum;
 import com.xspaceagi.system.sdk.permission.SpacePermissionService;
@@ -96,8 +97,8 @@ public class CustomPageBuildDomainServiceImpl implements ICustomPageBuildDomainS
     }
 
     // 调用node创建项目
-    public ReqResult<Map<String, Object>> initProject(Long projectId) {
-        Map<String, Object> resp = pageFileBuildClient.createProject(projectId);
+    public ReqResult<Map<String, Object>> initProject(Long projectId, TemplateTypeEnum templateType) {
+        Map<String, Object> resp = pageFileBuildClient.createProject(projectId, templateType);
         if (resp == null) {
             return ReqResult.error("9999", "Create project failed: build server returned no response");
         }

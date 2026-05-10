@@ -115,7 +115,7 @@ public class WeworkAgentApplicationServiceImpl implements WeworkAgentApplication
             return new AgentExecuteResultWithConv(outputText, convId, agentId);
         } catch (Exception e) {
             log.error("WeCom agent execution error: senderId={}", senderId, e);
-            String errorText = "模型执行异常: " + (e.getMessage() != null ? e.getMessage() : "未知错误");
+            String errorText = e.getMessage() != null ? e.getMessage() : "模型执行异常";
             return new AgentExecuteResultWithConv(errorText, null, agentId);
         } finally {
             RequestContext.remove();

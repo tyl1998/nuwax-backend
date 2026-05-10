@@ -11,6 +11,7 @@ import com.xspaceagi.agent.core.adapter.repository.entity.Published;
 import com.xspaceagi.agent.core.adapter.repository.entity.PublishedStatistics;
 import com.xspaceagi.agent.core.domain.service.ConversationDomainService;
 import com.xspaceagi.agent.core.infra.rpc.CategoryRpcService;
+import com.xspaceagi.agent.core.spec.enums.UsageScenarioEnum;
 import com.xspaceagi.agent.web.ui.controller.base.BaseController;
 import com.xspaceagi.agent.web.ui.controller.dto.PluginDetailDto;
 import com.xspaceagi.agent.web.ui.controller.dto.SkillDetailDto;
@@ -21,8 +22,6 @@ import com.xspaceagi.agent.web.ui.dto.PublishedComposeTableQueryDto;
 import com.xspaceagi.agent.web.ui.dto.PublishedKnowledgeQueryDto;
 import com.xspaceagi.compose.sdk.request.QueryDorisTableDefinePageRequest;
 import com.xspaceagi.compose.sdk.service.IComposeDbTableRpcService;
-import com.xspaceagi.knowledge.domain.model.KnowledgeConfigModel;
-import com.xspaceagi.knowledge.domain.repository.IKnowledgeConfigRepository;
 import com.xspaceagi.knowledge.sdk.request.KnowledgeConfigRequestVo;
 import com.xspaceagi.knowledge.sdk.sevice.IKnowledgeConfigRpcService;
 import com.xspaceagi.system.application.dto.TenantConfigDto;
@@ -56,10 +55,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.net.URLEncoder;
 import java.nio.charset.Charset;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 @Tag(name = "已发布的智能体、组件查询及收藏相关接口")
 @RestController
@@ -598,6 +594,7 @@ public class PublishedController extends BaseController {
         SuperPage<PublishedDto> page = publishApplicationService.queryPublishedList(publishedQueryDto);
         page.getRecords().forEach(publishedDto -> {
             publishedDto.setIcon(DefaultIconUrlUtil.setDefaultIconUrl(publishedDto.getIcon(), publishedDto.getName(), Published.TargetType.Skill.name()));
+            publishedDto.setUsageScenarios(parseUsageScenariosFromExt(publishedDto.getExt()));
         });
         return ReqResult.success(page);
     }
@@ -610,6 +607,7 @@ public class PublishedController extends BaseController {
         queryDto.setPage(publishedQueryDto.getPage());
         queryDto.setPageSize(publishedQueryDto.getPageSize());
         queryDto.setKw(publishedQueryDto.getKw());
+        queryDto.setUsageScenarios(publishedQueryDto.getUsageScenarios());
         queryDto.setJustReturnSpaceData(false);
         queryDto.setShowRecommend(false);
 
@@ -621,6 +619,7 @@ public class PublishedController extends BaseController {
         if (CollectionUtils.isNotEmpty(page.getRecords())) {
             page.getRecords().forEach(publishedDto -> {
                 publishedDto.setIcon(DefaultIconUrlUtil.setDefaultIconUrl(publishedDto.getIcon(), publishedDto.getName(), Published.TargetType.Skill.name()));
+                publishedDto.setUsageScenarios(parseUsageScenariosFromExt(publishedDto.getExt()));
             });
         }
         return ReqResult.success(page);
@@ -638,22 +637,25 @@ public class PublishedController extends BaseController {
             return ReqResult.error("无技能查看权限");
         }
         setCopyPermission(publishedDto);
-        SkillConfigDto skillConfigDto = JSON.parseObject(publishedDto.getConfig(), SkillConfigDto.class);
-        SkillDetailDto skillDetailDto = new SkillDetailDto();
-        if (skillConfigDto != null) {
-            skillDetailDto.setId(skillId);
-            skillDetailDto.setName(skillConfigDto.getName());
-            skillDetailDto.setDescription(skillConfigDto.getDescription());
-            skillDetailDto.setIcon(skillConfigDto.getIcon());
-            skillDetailDto.setFiles(skillConfigDto.getFiles());
-            skillDetailDto.setRemark(publishedDto.getRemark());
-            skillDetailDto.setCollect(publishedDto.isCollect());
-            skillDetailDto.setStatistics(publishedDto.getStatistics());
-            skillDetailDto.setPublishUser(publishedDto.getPublishUser());
-            skillDetailDto.setCreated(publishedDto.getCreated());
-            skillDetailDto.setAllowCopy(publishedDto.getAllowCopy());
-            skillDetailDto.setCategory(publishedDto.getCategory());
+        SkillConfigDto skillConfigDto = skillApplicationService.parsePublishedSkillConfig(publishedDto.getConfig(), publishedDto.getExt());
+        if (skillConfigDto == null) {
+            throw BizException.of(ErrorCodeEnum.INVALID_PARAM, BizExceptionCodeEnum.agentSkillConfigParseFailed);
         }
+        SkillDetailDto skillDetailDto = new SkillDetailDto();
+        skillDetailDto.setId(skillId);
+        skillDetailDto.setName(skillConfigDto.getName());
+        skillDetailDto.setDescription(skillConfigDto.getDescription());
+        skillDetailDto.setIcon(skillConfigDto.getIcon());
+        skillDetailDto.setFiles(skillConfigDto.getFiles());
+        skillDetailDto.setExt(publishedDto.getExt());
+        skillDetailDto.setUsageScenarios(parseUsageScenariosFromExt(publishedDto.getExt()));
+        skillDetailDto.setRemark(publishedDto.getRemark());
+        skillDetailDto.setCollect(publishedDto.isCollect());
+        skillDetailDto.setStatistics(publishedDto.getStatistics());
+        skillDetailDto.setPublishUser(publishedDto.getPublishUser());
+        skillDetailDto.setCreated(publishedDto.getCreated());
+        skillDetailDto.setAllowCopy(publishedDto.getAllowCopy());
+        skillDetailDto.setCategory(publishedDto.getCategory());
         skillDetailDto.setIcon(DefaultIconUrlUtil.setDefaultIconUrl(skillDetailDto.getIcon(), skillDetailDto.getName(), Published.TargetType.Skill.name()));
         return ReqResult.success(skillDetailDto);
     }
@@ -670,7 +672,10 @@ public class PublishedController extends BaseController {
             throw BizException.of(ErrorCodeEnum.INVALID_PARAM, BizExceptionCodeEnum.permissionDenied);
         }
         setCopyPermission(publishedDto);
-        SkillConfigDto skillConfigDto = JSON.parseObject(publishedDto.getConfig(), SkillConfigDto.class);
+        SkillConfigDto skillConfigDto = skillApplicationService.parsePublishedSkillConfig(publishedDto.getConfig(), publishedDto.getExt());
+        if (skillConfigDto == null) {
+            throw BizException.of(ErrorCodeEnum.INVALID_PARAM, BizExceptionCodeEnum.agentSkillConfigParseFailed);
+        }
         SkillExportResultDto exportResult = skillApplicationService.exportSkill(skillConfigDto);
 
         // 设置响应头
@@ -688,8 +693,12 @@ public class PublishedController extends BaseController {
         var spaceIds = this.obtainAuthSpaceIds();
         List<PublishedDto> publishedDtos = collectApplicationService.queryCollectListWithoutConfig(RequestContext.get().getUserId(), Published.TargetType.Skill, spaceIds);
         if (CollectionUtils.isNotEmpty(publishedDtos)) {
+            publishedDtos.forEach(publishedDto -> publishedDto.setUsageScenarios(parseUsageScenariosFromExt(publishedDto.getExt())));
+            publishedDtos = publishedDtos.stream().filter(item -> matchSkillExtFilter(item, publishedQueryDto)).toList();
             publishedDtos = filter(publishedQueryDto, publishedDtos);
-            publishedDtos.forEach(publishedDto -> publishedDto.setIcon(DefaultIconUrlUtil.setDefaultIconUrl(publishedDto.getIcon(), publishedDto.getName(), Published.TargetType.Skill.name())));
+            publishedDtos.forEach(publishedDto -> {
+                publishedDto.setIcon(DefaultIconUrlUtil.setDefaultIconUrl(publishedDto.getIcon(), publishedDto.getName(), Published.TargetType.Skill.name()));
+            });
         }
         return ReqResult.success(publishedDtos);
     }
@@ -713,6 +722,10 @@ public class PublishedController extends BaseController {
     public ReqResult<List<PublishedDto>> skillRecentlyUsedList(@RequestBody PublishedQueryDto publishedQueryDto) {
         Integer size = publishedQueryDto.getPageSize() != null && publishedQueryDto.getPageSize() > 0 ? publishedQueryDto.getPageSize() : 50;
         List<PublishedDto> publishedDtos = skillApplicationService.queryRecentlyUsedSkills(publishedQueryDto.getKw(), size);
+        if (CollectionUtils.isNotEmpty(publishedDtos)) {
+            publishedDtos.forEach(publishedDto -> publishedDto.setUsageScenarios(parseUsageScenariosFromExt(publishedDto.getExt())));
+            publishedDtos = publishedDtos.stream().filter(item -> matchSkillExtFilter(item, publishedQueryDto)).toList();
+        }
         return ReqResult.success(publishedDtos);
     }
 
@@ -757,6 +770,99 @@ public class PublishedController extends BaseController {
             throw BizException.of(ErrorCodeEnum.INVALID_PARAM, BizExceptionCodeEnum.permissionDenied);
         }
         publishedDto.setAllowCopy(publishedPermissionDto.isCopy() ? YesOrNoEnum.Y.getKey() : YesOrNoEnum.N.getKey());
+    }
+
+    private boolean matchSkillExtFilter(PublishedDto publishedDto, PublishedQueryDto queryDto) {
+        if (queryDto == null) {
+            return true;
+        }
+        Boolean supportTaskAgent = extractUsageScenarioFlag(queryDto.getUsageScenarios(), UsageScenarioEnum.TaskAgent);
+        Boolean supportPageApp = extractUsageScenarioFlag(queryDto.getUsageScenarios(), UsageScenarioEnum.PageApp);
+        if (supportTaskAgent == null && supportPageApp == null) {
+            return true;
+        }
+        List<UsageScenarioEnum> usageScenarios = publishedDto.getUsageScenarios();
+        if (CollectionUtils.isEmpty(usageScenarios)) {
+            return false;
+        }
+        if (Boolean.TRUE.equals(supportTaskAgent) && !usageScenarios.contains(UsageScenarioEnum.TaskAgent)) {
+            return false;
+        }
+        if (Boolean.TRUE.equals(supportPageApp) && !usageScenarios.contains(UsageScenarioEnum.PageApp)) {
+            return false;
+        }
+        return true;
+    }
+
+    private boolean isExtEnabled(Map<?, ?> extMap, String key) {
+        return Objects.equals(parseExtInt(extMap.get(key)), 1);
+    }
+
+    private Integer parseExtInt(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return Integer.parseInt(value.toString());
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private List<UsageScenarioEnum> parseUsageScenariosFromExt(Object ext) {
+        List<UsageScenarioEnum> usageScenarios = new ArrayList<>();
+        if (ext == null) {
+            usageScenarios.add(UsageScenarioEnum.TaskAgent);
+            return usageScenarios;
+        }
+
+        if (ext instanceof String extStr) {
+            if (extStr.isBlank()) {
+                usageScenarios.add(UsageScenarioEnum.TaskAgent);
+                return usageScenarios;
+            }
+            try {
+                Object parsed = JSON.parse(extStr);
+                return parseUsageScenariosFromExt(parsed);
+            } catch (Exception ignored) {
+                return usageScenarios;
+            }
+        }
+
+        if (ext instanceof SkillExtDto skillExtDto) {
+            if (Integer.valueOf(1).equals(skillExtDto.getSupportTaskAgent())) {
+                usageScenarios.add(UsageScenarioEnum.TaskAgent);
+            }
+            if (Integer.valueOf(1).equals(skillExtDto.getSupportPageApp())) {
+                usageScenarios.add(UsageScenarioEnum.PageApp);
+            }
+            return usageScenarios;
+        }
+
+        if (!(ext instanceof Map<?, ?> extMap)) {
+            return usageScenarios;
+        }
+
+        if (isExtEnabled(extMap, "supportTaskAgent")) {
+            usageScenarios.add(UsageScenarioEnum.TaskAgent);
+        }
+        if (isExtEnabled(extMap, "supportPageApp")) {
+            usageScenarios.add(UsageScenarioEnum.PageApp);
+        }
+        return usageScenarios;
+    }
+
+    private Boolean extractUsageScenarioFlag(List<UsageScenarioEnum> usageScenarios, UsageScenarioEnum targetScenario) {
+        if (targetScenario == null) {
+            return null;
+        }
+        if (usageScenarios == null || usageScenarios.isEmpty()) {
+            return null;
+        }
+        return usageScenarios.contains(targetScenario) ? Boolean.TRUE : null;
     }
 
 }

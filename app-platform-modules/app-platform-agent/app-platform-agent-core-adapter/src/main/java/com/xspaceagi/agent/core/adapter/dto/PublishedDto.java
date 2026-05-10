@@ -6,6 +6,7 @@ import java.util.List;
 
 import com.xspaceagi.agent.core.adapter.repository.entity.Published;
 import com.xspaceagi.agent.core.spec.enums.PluginTypeEnum;
+import com.xspaceagi.agent.core.spec.enums.UsageScenarioEnum;
 import com.xspaceagi.custompage.sdk.dto.SourceTypeEnum;
 
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -38,6 +39,12 @@ public class PublishedDto implements Serializable {
 
     @Schema(description = "图标")
     private String icon;
+
+    @Schema(description = "扩展字段")
+    private Object ext;
+
+    @Schema(description = "适用场景列表，如 [TaskAgent, PageApp]")
+    private List<UsageScenarioEnum> usageScenarios;
 
     private String remark;
 

@@ -12,7 +12,11 @@ import com.xspaceagi.custompage.infra.vo.BackendVo;
 import com.xspaceagi.custompage.sdk.dto.ProjectType;
 import com.xspaceagi.custompage.sdk.dto.ProxyConfig;
 import com.xspaceagi.custompage.sdk.dto.ProxyConfigBackend;
+import com.xspaceagi.sandbox.sdk.server.ISandboxConfigRpcService;
+import com.xspaceagi.sandbox.sdk.service.dto.SandboxConfigRpcDto;
+import com.xspaceagi.sandbox.sdk.service.dto.SandboxConfigValue;
 import com.xspaceagi.system.spec.cache.SimpleJvmHashCache;
+import com.xspaceagi.system.spec.common.RequestContext;
 import com.xspaceagi.system.spec.enums.ErrorCodeEnum;
 import com.xspaceagi.system.spec.exception.BizException;
 import com.xspaceagi.system.spec.exception.BizExceptionCodeEnum;
@@ -46,6 +50,9 @@ public class ProxyConfigService {
     @Resource
     private ICustomPageDomainRepository customPageDomainRepository;
 
+    @Resource
+    private ISandboxConfigRpcService sandboxConfigRpcService;
+
     @Value("${custom-page.dev-server-host}")
     private String customPageDevServerHost;
 
@@ -58,6 +65,8 @@ public class ProxyConfigService {
     // 启动 docker 代理
     @Value("${custom-page.docker-proxy.enable}")
     private boolean enableDockerProxy;
+
+    private static final Integer DEFAULT_NGINX_PORT = 8099;
 
     public BackendVo selectBackend(String basePath, String realUri, ProxyConfig.ProxyEnv env, Long agentId) {
 
@@ -102,16 +111,15 @@ public class ProxyConfigService {
                 if (customPageBuildModel == null) {
                     synchronized (this) {
                         if (customPageBuildModel == null) {
-                            customPageBuildModel = customPageBuildRepository
-                                    .getByProjectId(customPageConfig.getId());
+                            customPageBuildModel = customPageBuildRepository.getByProjectId(customPageConfig.getId());
                             if (customPageBuildModel == null) {
-                                log.warn("select Backend failed - project ID not found: {} build info", customPageConfig.getId());
+                                log.warn("select Backend failed - project ID not found: {}", customPageConfig.getId());
                                 throw BizException.of(ErrorCodeEnum.INVALID_PARAM, BizExceptionCodeEnum.customPageProxyProjectBuildNotFound);
                                 // return null;
                             }
 
                             if (customPageBuildModel.getDevPort() == null) {
-                                log.warn("select Backend failed - project dev service not started", customPageConfig.getId());
+                                log.warn("select Backend failed - project dev service not started, projectId:{}", customPageConfig.getId());
                                 throw BizException.of(ErrorCodeEnum.INVALID_PARAM, BizExceptionCodeEnum.customPageProxyDevServerNotStarted);
                                 // return null;
                             }
@@ -120,20 +128,22 @@ public class ProxyConfigService {
                 }
                 devPort = customPageBuildModel.getDevPort();
 
+                SandboxConfigValue sandboxConfigValue = loadSandboxConfigValue(customPageConfig);
                 String devUrl = "";
                 if (enableDockerProxy) {
-                    if (customPageDockerProxyBaseUrl.startsWith("http://")
-                            || customPageDockerProxyBaseUrl.startsWith("https://")) {
-                        devUrl = customPageDockerProxyBaseUrl;
+                    if (sandboxConfigValue != null && sandboxConfigValue.getVncPort() > 0) {
+                        devUrl = sandboxConfigValue.getHostWithScheme() + ":" + sandboxConfigValue.getVncPort();
                     } else {
-                        devUrl = "http://" + customPageDockerProxyBaseUrl;
+                        if (customPageDockerProxyBaseUrl.startsWith("http://")
+                                || customPageDockerProxyBaseUrl.startsWith("https://")) {
+                            devUrl = customPageDockerProxyBaseUrl;
+                        } else {
+                            devUrl = "http://" + customPageDockerProxyBaseUrl;
+                        }
                     }
-                    if (!customPageDockerProxyBaseUrl.endsWith("/")) {
-                        devUrl += "/";
-                    }
-                    devUrl += customPageBuildModel.getDevPort();
+                } else if (sandboxConfigValue != null) {
+                    devUrl = buildDirectDevServerUrl(sandboxConfigValue.getHostWithScheme(), customPageBuildModel.getDevPort());
                 } else {
-                    // 检查 customPageDevServerHost 是否已经包含协议，避免重复添加
                     if (customPageDevServerHost.startsWith("http://")
                             || customPageDevServerHost.startsWith("https://")) {
                         devUrl = customPageDevServerHost + ":" + customPageBuildModel.getDevPort();
@@ -152,7 +162,14 @@ public class ProxyConfigService {
                 customPageConfig.getProxyConfigs().add(devProxyConfig);
             }
             if (env == ProxyConfig.ProxyEnv.prod) {
-                String prodUrl = customPageProdServerHost;
+                String prodUrl = null;
+                SandboxConfigValue sandboxConfigForProd = loadSandboxConfigValue(customPageConfig);
+                if (sandboxConfigForProd != null) {
+                    prodUrl = buildDirectDevServerUrl(sandboxConfigForProd.getHostWithScheme(), DEFAULT_NGINX_PORT);
+                }
+                if (prodUrl == null) {
+                    prodUrl = customPageProdServerHost;
+                }
                 if (!prodUrl.endsWith("/")) {
                     prodUrl += "/";
                 }
@@ -239,7 +256,8 @@ public class ProxyConfigService {
                     }
                 }
                 if (enableDockerProxy && env == ProxyConfig.ProxyEnv.dev && devPort != null) {
-                    fullPath = "/proxy/" + devPort + fullPath;
+                    int routePort = devPort;
+                    fullPath = "/proxy/" + routePort + fullPath;
                 }
                 backendVo.setUri(fullPath);
                 log.debug("select Backend [-{}] assemble full path - full Path: {}", env.name(), fullPath);
@@ -274,8 +292,48 @@ public class ProxyConfigService {
         return backendVo;
     }
 
-    public static ProxyConfig longestPrefixMatch(String realUri,
-                                                 List<ProxyConfig> proxyConfigs) {
+    private SandboxConfigValue loadSandboxConfigValue(CustomPageConfig customPageConfig) {
+        Long sandboxId = customPageConfig.getSandboxId();
+        if (sandboxId == null) {
+            return null;
+        }
+        try {
+            RequestContext<?> requestContext = RequestContext.get();
+            Long tenantId = requestContext == null ? null : requestContext.getTenantId();
+            Long userId = requestContext == null ? null : requestContext.getUserId();
+            SandboxConfigRpcDto sandboxConfig = sandboxConfigRpcService.selectAppDevelopmentSandbox(
+                    tenantId,
+                    userId,
+                    customPageConfig.getSpaceId(),
+                    customPageConfig.getId(),
+                    sandboxId);
+            if (sandboxConfig == null) {
+                return null;
+            }
+            SandboxConfigValue configValue = sandboxConfig.getConfigValue();
+            if (configValue == null || configValue.getHostWithScheme() == null || configValue.getHostWithScheme().isBlank()) {
+                return null;
+            }
+            return configValue;
+        } catch (Exception e) {
+            log.warn("load sandbox config for dev url failed, projectId={}, fallback to yaml",
+                    customPageConfig.getId(), e);
+            return null;
+        }
+    }
+
+    private static String buildDirectDevServerUrl(String hostWithScheme, int port) {
+        if (hostWithScheme == null || hostWithScheme.isBlank()) {
+            return null;
+        }
+        String host = hostWithScheme.trim();
+        while (host.endsWith("/")) {
+            host = host.substring(0, host.length() - 1);
+        }
+        return host + ":" + port;
+    }
+
+    public static ProxyConfig longestPrefixMatch(String realUri, List<ProxyConfig> proxyConfigs) {
         ProxyConfig longestMatchProxyConfig = null;
         int maxLength = -1;
 

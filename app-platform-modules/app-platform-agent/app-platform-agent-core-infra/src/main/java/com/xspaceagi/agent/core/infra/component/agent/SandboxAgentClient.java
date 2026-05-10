@@ -481,8 +481,8 @@ public class SandboxAgentClient {
                     if (jsonObject.containsKey("error")) {
                         boolean isInternalError = false;
                         String error = jsonObject.getString("error");
-                        if (error.equals("Internal error")) {
-                            error = I18nUtil.systemMessage(agentContext.getUser().getLangMap(), "Backend.Sandbox.Error.InternalError");
+                        if (error.contains("Internal error")) {
+                            error = I18nUtil.systemMessage(agentContext.getUser().getLangMap(), "Backend.Sandbox.Error.InternalError") + "(" + error + ")";
                             isInternalError = true;
                         }
                         sink.next(buildChatMessage(agentContext, "\n\n```\n" + error + "\n```\n\n"));
@@ -730,6 +730,8 @@ public class SandboxAgentClient {
             if (modelConfig.getIsReasonModel() != null && modelConfig.getIsReasonModel() == 1) {
                 int maxThinkingTokens = modelConfig.getMaxTokens() == null ? 2048 : modelConfig.getMaxTokens() / 2;
                 env.put("MAX_THINKING_TOKENS", maxThinkingTokens > 4096 ? "4096" : Integer.toString(maxThinkingTokens));//最大值暂时支持4096
+            } else {
+                env.put("CLAUDE_CODE_DISABLE_THINKING", "1");
             }
         }
         return AgentRequest.AgentServer.builder().agent_id("claude-code-acp-ts").command("claude-code-acp-ts").args(List.of()).env(env).build();

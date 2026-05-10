@@ -3,6 +3,7 @@ package com.xspaceagi.custompage.ui.web.dto;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.xspaceagi.custompage.sdk.dto.SourceTypeEnum;
+import com.xspaceagi.custompage.sdk.dto.TemplateTypeEnum;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
@@ -36,5 +37,8 @@ public class CustomPageCreateReq {
 
     @Schema(description = "Cover image source type")
     private SourceTypeEnum coverImgSourceType;
+
+    @Schema(description = "Project template type: react/vue3")
+    private TemplateTypeEnum templateType;
 
 }

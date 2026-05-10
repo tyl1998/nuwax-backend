@@ -4,15 +4,13 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.xspaceagi.agent.core.spec.handler.JsonTypeHandler;
-import io.swagger.v3.oas.annotations.media.Schema;
+import com.xspaceagi.system.spec.common.JsonTypeHandlerWithoutType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.Date;
-import java.util.List;
 
 @Data
 @TableName(value = "publish_apply", autoResultMap = true)
@@ -48,6 +46,9 @@ public class PublishApply {
     private String icon;
 
     private String config;
+
+    @TableField(value = "ext", typeHandler = JsonTypeHandlerWithoutType.class)
+    private Object ext;
 
     private String remark;
 

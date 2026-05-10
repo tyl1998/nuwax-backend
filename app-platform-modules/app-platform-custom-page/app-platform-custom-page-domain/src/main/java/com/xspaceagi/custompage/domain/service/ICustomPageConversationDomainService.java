@@ -27,4 +27,14 @@ public interface ICustomPageConversationDomainService {
      */
     ReqResult<SuperPage<CustomPageConversationModel>> pageQuery(CustomPageConversationModel queryModel, Long current,
             Long pageSize, UserContext userContext);
+
+    /**
+     * 根据requestId回填用户消息的sessionId
+     */
+    ReqResult<Void> updateUserSessionIdByRequestId(Long projectId, String requestId, String sessionId, UserContext userContext);
+
+    /**
+     * 删除项目下的会话记录
+     */
+    ReqResult<Void> deleteByProjectId(Long projectId, UserContext userContext);
 }

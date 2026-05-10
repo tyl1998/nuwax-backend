@@ -30,6 +30,7 @@ public class CustomPageConfigTranslatorImpl implements ICustomPageConfigTranslat
         model.setProxyConfigs(entity.getProxyConfigs());
         model.setPageArgConfigs(entity.getPageArgConfigs());
         model.setDataSources(entity.getDataSources());
+        model.setSandboxId(entity.getSandboxId());
         model.setExt(entity.getExt());
         model.setTenantId(entity.getTenantId());
         model.setSpaceId(entity.getSpaceId());
@@ -64,6 +65,7 @@ public class CustomPageConfigTranslatorImpl implements ICustomPageConfigTranslat
         entity.setProxyConfigs(model.getProxyConfigs());
         entity.setPageArgConfigs(model.getPageArgConfigs());
         entity.setDataSources(model.getDataSources());
+        entity.setSandboxId(model.getSandboxId());
         entity.setExt(model.getExt());
         entity.setTenantId(model.getTenantId());
         entity.setSpaceId(model.getSpaceId());

@@ -1,6 +1,7 @@
 package com.xspaceagi.knowledge.man.ui.web;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.xspaceagi.file.sdk.IFileAccessService;
 import com.xspaceagi.knowledge.core.application.service.IKnowledgeConfigApplicationService;
 import com.xspaceagi.knowledge.core.application.service.IKnowledgeDocumentApplicationService;
 import com.xspaceagi.knowledge.core.spec.utils.ThreadTenantUtil;
@@ -30,14 +31,12 @@ import com.xspaceagi.system.spec.page.PageQueryParamVo;
 import com.xspaceagi.system.spec.page.PageQueryVo;
 import com.xspaceagi.system.spec.page.SuperPage;
 import com.xspaceagi.system.spec.tenant.thread.TenantRunnable;
-import com.xspaceagi.system.spec.utils.FileAkUtil;
 import com.xspaceagi.system.spec.utils.ValidateUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.collections4.CollectionUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.beans.IntrospectionException;
@@ -69,7 +68,7 @@ public class KnowledgeDocumentController extends BaseController {
     private SpaceApplicationService spaceApplicationService;
 
     @Resource
-    private FileAkUtil fileUrl;
+    private IFileAccessService fileUrl;
 
     //新增内容
     @Resource
@@ -230,12 +229,7 @@ public class KnowledgeDocumentController extends BaseController {
     @LogPrint(step = "知识库[知识库文档]-数据新增接口")
     @Operation(summary = "数据新增接口", description = "新增数据")
     @RequestMapping(path = "/add", method = RequestMethod.POST)
-    public ReqResult<List<Long>> add(@RequestBody KnowledgeDocumentAddRequest addDto)
-            throws IntrospectionException, InvocationTargetException, IllegalAccessException {
-
-        if (CollectionUtils.isNotEmpty(addDto.getFileList())) {
-            addDto.getFileList().forEach(fileInfoVo -> fileInfoVo.setDocUrl(fileUrl.getFileUrlWithAk(fileInfoVo.getDocUrl())));
-        }
+    public ReqResult<List<Long>> add(@RequestBody KnowledgeDocumentAddRequest addDto) {
 
         if (Objects.nonNull(addDto.getSegmentConfig())) {
             ValidateUtil.validateThrowIfException(addDto.getSegmentConfig());

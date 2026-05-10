@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import com.baomidou.dynamic.datasource.annotation.DSTransactional;
 import com.google.common.collect.Lists;
 import com.xspaceagi.agent.core.adapter.application.ModelApplicationService;
+import com.xspaceagi.file.sdk.IFileAccessService;
 import com.xspaceagi.knowledge.core.adapter.client.dto.PushResult;
 import com.xspaceagi.knowledge.core.spec.enums.FulltextSyncStatusEnum;
 import com.xspaceagi.knowledge.core.spec.enums.KnowledgeTaskRunTypeEnum;
@@ -33,6 +34,7 @@ import com.xspaceagi.system.spec.tenant.thread.TenantRunnable;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Service;
@@ -97,6 +99,8 @@ public class KnowledgeDocumentDomainService implements IKnowledgeDocumentDomainS
 
     @Resource
     private IKnowledgeFullTextSearchDomainService fullTextSearchDomainService;
+    @Autowired
+    private IFileAccessService iFileAccessService;
 
     @Override
     public KnowledgeDocumentModel queryOneInfoById(Long id) {
@@ -227,6 +231,7 @@ public class KnowledgeDocumentDomainService implements IKnowledgeDocumentDomainS
 
         try {
             // 线程池提交生成向量数据库的数据的任务
+            model.setDocUrl(iFileAccessService.getFileUrlWithAk(model.getDocUrl(), true));
             Runnable runnable = () -> this.self.workRunTaskForDocument(model, userContext, docId);
 
             TenantRunnable tenantRunnable = new TenantRunnable(runnable);
@@ -323,7 +328,7 @@ public class KnowledgeDocumentDomainService implements IKnowledgeDocumentDomainS
     @LogPrint(step = "知识库-文档自动处理任务")
     @Override
     public void workRetryRunTaskForDocument(KnowledgeTaskRunTypeEnum runTypeEnum, KnowledgeDocumentModel model,
-            UserContext userContext, Long docId) {
+                                            UserContext userContext, Long docId) {
 
         switch (runTypeEnum) {
             case SEGMENT -> {
@@ -732,7 +737,7 @@ public class KnowledgeDocumentDomainService implements IKnowledgeDocumentDomainS
 
         // 1. 标记为全文检索同步阶段
         this.knowledgeTaskDomainService.changeTaskStatus(autoRecordTask,
-            KnowledgeTaskRunTypeEnum.FULLTEXT_SYNC, userContext);
+                KnowledgeTaskRunTypeEnum.FULLTEXT_SYNC, userContext);
         // 2. 对应的知识库，标记为全文检索待同步，方便知识库全文检索重试，来进行重试;
         this.knowledgeConfigRepository.updateFulltextSyncStatus(model.getKbId(), FulltextSyncStatusEnum.UNSYNCED.getCode());
 
@@ -749,20 +754,20 @@ public class KnowledgeDocumentDomainService implements IKnowledgeDocumentDomainS
             if (!CollectionUtils.isEmpty(rawSegments)) {
                 // 转换为全文检索模型
                 List<com.xspaceagi.knowledge.domain.model.fulltext.RawSegmentFullTextModel> fullTextModels =
-                    rawSegments.stream()
-                        .map(raw -> com.xspaceagi.knowledge.domain.model.fulltext.RawSegmentFullTextModel.builder()
-                            .rawId(raw.getId())
-                            .docId(raw.getDocId())
-                            .kbId(raw.getKbId())
-                            .rawText(raw.getRawTxt())
-                            .tenantId(tenantId)
-                            .spaceId(spaceId)
-                            .build())
-                        .toList();
+                        rawSegments.stream()
+                                .map(raw -> com.xspaceagi.knowledge.domain.model.fulltext.RawSegmentFullTextModel.builder()
+                                        .rawId(raw.getId())
+                                        .docId(raw.getDocId())
+                                        .kbId(raw.getKbId())
+                                        .rawText(raw.getRawTxt())
+                                        .tenantId(tenantId)
+                                        .spaceId(spaceId)
+                                        .build())
+                                .toList();
 
                 // 批量推送到 Quickwit
                 PushResult pushResult =
-                    fullTextSearchDomainService.pushSegments(fullTextModels);
+                        fullTextSearchDomainService.pushSegments(fullTextModels);
 
                 // ✅ 根据 success_raw_ids 精确更新同步状态
                 if (pushResult != null && !CollectionUtils.isEmpty(pushResult.getSuccessRawIds())) {
@@ -773,14 +778,14 @@ public class KnowledgeDocumentDomainService implements IKnowledgeDocumentDomainS
                     knowledgeRawSegmentRepository.batchUpdateSyncStatus(successRawIds, RawTextFulltextSyncStatusEnum.SYNCED.getCode());
 
                     log.info("FTS sync status updated: docId={}, kbId={}, totalSegments={}, successCount={}",
-                        docId, kbId, rawSegments.size(), successRawIds.size());
+                            docId, kbId, rawSegments.size(), successRawIds.size());
                 } else {
                     log.warn("Push empty or no success: docId={}, kbId={}", docId, kbId);
                 }
 
                 log.info("Doc FTS sync done: docId={}, kbId={}, segmentCount={}, indexedCount={}",
-                    docId, kbId, rawSegments.size(),
-                    pushResult != null ? pushResult.getIndexedCount() : 0);
+                        docId, kbId, rawSegments.size(),
+                        pushResult != null ? pushResult.getIndexedCount() : 0);
             } else {
                 log.warn("No segments, skip FTS sync: docId={}", docId);
             }
@@ -792,7 +797,7 @@ public class KnowledgeDocumentDomainService implements IKnowledgeDocumentDomainS
 
         // 3. 改为QA状态
         this.knowledgeTaskDomainService.changeTaskStatus(autoRecordTask,
-            KnowledgeTaskRunTypeEnum.QA, userContext);
+                KnowledgeTaskRunTypeEnum.QA, userContext);
         log.info("Task status set to QA: kbId={}, docId={}", model.getKbId(), docId);
     }
 

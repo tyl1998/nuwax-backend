@@ -18,7 +18,7 @@ import org.springframework.stereotype.Service;
 public class WechatIlinkAttachmentServiceImpl implements WechatIlinkAttachmentService {
 
     @Resource
-    private FileUploadHelperService fileUploadHelperService;
+    private ImFileUploadHelper fileUploadHelperService;
 
     @Resource
     private TenantConfigApplicationService tenantConfigApplicationService;
@@ -32,25 +32,25 @@ public class WechatIlinkAttachmentServiceImpl implements WechatIlinkAttachmentSe
      * @param tenantId 租户ID
      * @return 上传失败时返回 null
      */
-    public AttachmentDto upload(byte[] bytes, String originalFilename, String contentType, Long tenantId) {
+    public AttachmentDto upload(byte[] bytes, String originalFilename, String contentType, Long tenantId, Long userId) {
         if (bytes == null || bytes.length == 0) {
             return null;
         }
         TenantConfigDto tenantConfig = tenantId != null ? tenantConfigApplicationService.getTenantConfig(tenantId) : null;
 
-        FileUploadHelperService.UploadResult result;
+        ImFileUploadHelper.UploadResult result;
         if (StringUtils.isNotBlank(originalFilename)) {
             // 如果有文件名，优先保留文件名，同时允许上游显式覆盖 MIME。
             result = fileUploadHelperService.detectAndUploadByFileName(
-                bytes, originalFilename, contentType, ImChannelEnum.WECHAT_ILINK, tenantConfig);
+                bytes, originalFilename, contentType, ImChannelEnum.WECHAT_ILINK, tenantConfig, userId);
         } else if (StringUtils.isNotBlank(contentType)) {
             // 对于语音、视频等没有文件名的场景，使用 MIME 生成扩展名并上传。
             result = fileUploadHelperService.uploadWithMimeOverride(
-                bytes, contentType, inferTypePrefix(contentType), ImChannelEnum.WECHAT_ILINK, tenantConfig);
+                bytes, contentType, inferTypePrefix(contentType), ImChannelEnum.WECHAT_ILINK, tenantConfig, userId);
         } else {
             // 否则使用完整检测（基于内容）
             result = fileUploadHelperService.detectAndUpload(
-                bytes, null, null, null, null, null, ImChannelEnum.WECHAT_ILINK, tenantConfig);
+                bytes, null, null, null, null, null, ImChannelEnum.WECHAT_ILINK, tenantConfig, userId);
         }
 
         if (result.isSuccess()) {

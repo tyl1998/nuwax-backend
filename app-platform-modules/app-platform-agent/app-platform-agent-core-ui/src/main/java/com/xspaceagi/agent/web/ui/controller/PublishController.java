@@ -163,6 +163,7 @@ public class PublishController extends BaseController {
         Integer publishAudit = YesOrNoEnum.Y.getKey();
         Long spaceId = null;
         String agentType = null;
+        Object ext = null;
         if (publishApplySubmitDto.getTargetType() == Published.TargetType.Agent) {
             assert targetConfig instanceof AgentConfigDto;
             AgentConfigDto agentConfigDto = (AgentConfigDto) targetConfig;
@@ -205,6 +206,7 @@ public class PublishController extends BaseController {
             name = skillConfigDto.getName();
             description = skillConfigDto.getDescription();
             icon = skillConfigDto.getIcon();
+            ext = skillConfigDto.getExt();
             spaceId = skillConfigDto.getSpaceId();
             publishAudit = tenantConfigDto.getSkillPublishAudit();
         }
@@ -244,6 +246,7 @@ public class PublishController extends BaseController {
             publishApplyDto.setName(name);
             publishApplyDto.setDescription(description);
             publishApplyDto.setIcon(icon);
+            publishApplyDto.setExt(ext);
             publishApplyDto.setTargetConfig(targetConfig);
             publishApplyDto.setSpaceId(spaceId);
             publishApplyDto.setScope(publishItem.getScope());
@@ -368,12 +371,17 @@ public class PublishController extends BaseController {
             id = workflowApplicationService.copyWorkflow(RequestContext.get().getUserId(), workflowConfigDto, templateCopyDto.getTargetSpaceId());
         }
         if (templateCopyDto.getTargetType() == Published.TargetType.Skill) {
-            PublishedDto publishedDto = publishApplicationService.queryPublished(Published.TargetType.Skill, templateCopyDto.getTargetId());
-            if (publishedDto == null) {
+            SkillConfigDto skillConfigDto = skillApplicationService.queryPublishedSkillConfig(templateCopyDto.getTargetId(), null, true);
+            if (skillConfigDto == null) {
                 throw BizException.of(ErrorCodeEnum.INVALID_PARAM, BizExceptionCodeEnum.agentSkillOffline);
             }
-            SkillConfigDto skillConfigDto = JSON.parseObject(publishedDto.getConfig(), SkillConfigDto.class);
-            if (skillConfigDto == null) {
+            if (skillConfigDto.getSpaceId() == null) {
+                SkillConfigDto sourceSkill = skillApplicationService.queryById(templateCopyDto.getTargetId(), false);
+                if (sourceSkill != null) {
+                    skillConfigDto.setSpaceId(sourceSkill.getSpaceId());
+                }
+            }
+            if (skillConfigDto.getSpaceId() == null) {
                 throw BizException.of(ErrorCodeEnum.INVALID_PARAM, BizExceptionCodeEnum.agentSkillConfigParseFailed);
             }
             id = skillApplicationService.copySkill(skillConfigDto, templateCopyDto.getTargetSpaceId());
@@ -407,9 +415,17 @@ public class PublishController extends BaseController {
             creatorId = pluginDto.getCreatorId();
         }
         if (publishedDto.getTargetType() == Published.TargetType.Skill) {
-            SkillConfigDto skillConfigDto = JSON.parseObject(publishedDto.getConfig(), SkillConfigDto.class);
-            originalSpaceId = skillConfigDto.getSpaceId();
-            creatorId = skillConfigDto.getCreatorId();
+            SkillConfigDto skillConfigDto = skillApplicationService.queryById(publishedDto.getTargetId(), false);
+            if (skillConfigDto != null) {
+                originalSpaceId = skillConfigDto.getSpaceId();
+                creatorId = skillConfigDto.getCreatorId();
+            }
+            if (originalSpaceId == null) {
+                originalSpaceId = publishedDto.getSpaceId();
+            }
+            if (creatorId == null && publishedDto.getPublishUser() != null) {
+                creatorId = publishedDto.getPublishUser().getUserId();
+            }
         }
         //发布者和接受方都可以下架
         try {

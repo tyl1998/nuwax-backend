@@ -22,7 +22,8 @@ import com.xspaceagi.custompage.sdk.dto.DataSourceDto;
 import com.xspaceagi.custompage.sdk.dto.ExportTypeEnum;
 import com.xspaceagi.custompage.sdk.dto.PageArgConfig;
 import com.xspaceagi.custompage.sdk.dto.ProxyConfig;
-import com.xspaceagi.system.application.service.SysUserPermissionCacheService;
+import com.xspaceagi.sandbox.sdk.server.ISandboxConfigRpcService;
+import com.xspaceagi.sandbox.sdk.service.dto.SandboxConfigRpcDto;
 import com.xspaceagi.system.sdk.server.IUserDataPermissionRpcService;
 import com.xspaceagi.system.sdk.service.dto.UserDataPermissionDto;
 import com.xspaceagi.system.spec.common.UserContext;
@@ -65,7 +66,7 @@ public class CustomPageConfigApplicationServiceImpl implements ICustomPageConfig
     @Resource
     private IUserDataPermissionRpcService userDataPermissionRpcService;
     @Resource
-    private SysUserPermissionCacheService sysUserPermissionCacheService;
+    private ISandboxConfigRpcService sandboxConfigRpcService;
 
     // 需要事务
     @Transactional(rollbackFor = Exception.class)
@@ -107,9 +108,25 @@ public class CustomPageConfigApplicationServiceImpl implements ICustomPageConfig
                     configResult.getMessage() != null ? configResult.getMessage() : "");
         }
         CustomPageConfigModel configModel = configResult.getData();
+        Long projectId = configModel.getId();
+
+        Long sandboxId = null;
+        try {
+            SandboxConfigRpcDto sandboxConfig = sandboxConfigRpcService.selectAppDevelopmentSandbox(
+                    userContext.getTenantId(),
+                    userContext.getUserId(),
+                    configModel.getSpaceId(),
+                    projectId,
+                    null);
+            sandboxId = sandboxConfig != null ? sandboxConfig.getId() : null;
+            if (sandboxId == null) {
+                log.info("[create] project Id={},bind sandbox failed,message=No available sandbox", projectId);
+            }
+        } catch (Exception e) {
+            log.info("[create] project Id={},bind sandbox failed,message={}", projectId, e.getMessage());
+        }
 
         // 创建build表
-        Long projectId = configModel.getId();
         ReqResult<CustomPageBuildModel> buildResult = customPageBuildDomainService.createProject(projectId,
                 model.getSpaceId(),
                 userContext);
@@ -142,6 +159,7 @@ public class CustomPageConfigApplicationServiceImpl implements ICustomPageConfig
         CustomPageConfigModel bindModel = new CustomPageConfigModel();
         bindModel.setId(projectId);
         bindModel.setDevAgentId(agentResult.getData());
+        bindModel.setSandboxId(sandboxId);
         ReqResult<CustomPageConfigModel> result = customPageConfigDomainService.update(
                 bindModel,
                 userContext);

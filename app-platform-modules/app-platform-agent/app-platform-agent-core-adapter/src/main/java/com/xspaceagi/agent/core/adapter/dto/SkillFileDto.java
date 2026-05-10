@@ -14,6 +14,10 @@ public class SkillFileDto {
     private String contents;
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
+    @Schema(description = "文件代理下载地址")
+    private String fileProxyUrl;
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     @Schema(description = "重命名前的文件名")
     private String renameFrom;
 

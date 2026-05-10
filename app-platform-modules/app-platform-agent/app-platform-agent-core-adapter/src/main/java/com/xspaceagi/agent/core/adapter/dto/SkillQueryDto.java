@@ -1,6 +1,7 @@
 package com.xspaceagi.agent.core.adapter.dto;
 
 import com.xspaceagi.agent.core.adapter.repository.entity.Published;
+import com.xspaceagi.agent.core.spec.enums.UsageScenarioEnum;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -21,5 +22,8 @@ public class SkillQueryDto implements Serializable {
 
     @Schema(description = "发布状态")
     private List<Published.PublishStatus> publishStatus;
+
+    @Schema(description = "适用场景筛选参数，如 [TaskAgent, PageApp]")
+    private List<UsageScenarioEnum> usageScenarios;
 
 }

@@ -3,6 +3,8 @@ package com.xspaceagi.sandbox.api;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.xspaceagi.sandbox.api.vo.SandboxServerConfig;
+import com.xspaceagi.sandbox.application.dto.SandboxBindInfoDto;
+import com.xspaceagi.sandbox.application.dto.SandboxConfigDto;
 import com.xspaceagi.sandbox.application.service.SandboxConfigApplicationService;
 import com.xspaceagi.sandbox.infra.dao.entity.SandboxConfig;
 import com.xspaceagi.sandbox.infra.dao.service.SandboxConfigService;
@@ -12,10 +14,14 @@ import com.xspaceagi.sandbox.sdk.service.dto.SandboxConfigRpcDto;
 import com.xspaceagi.sandbox.sdk.service.dto.SandboxConfigValue;
 import com.xspaceagi.sandbox.sdk.service.dto.SandboxGlobalConfigDto;
 import com.xspaceagi.sandbox.sdk.service.dto.SandboxServerInfo;
+import com.xspaceagi.sandbox.sdk.service.enums.IsolationEnum;
 import com.xspaceagi.sandbox.spec.enums.SandboxScopeEnum;
 import com.xspaceagi.system.application.dto.TenantConfigDto;
 import com.xspaceagi.system.application.service.TenantConfigApplicationService;
 import com.xspaceagi.system.spec.common.RequestContext;
+import com.xspaceagi.system.spec.enums.ErrorCodeEnum;
+import com.xspaceagi.system.spec.exception.BizException;
+import com.xspaceagi.system.spec.exception.BizExceptionCodeEnum;
 import com.xspaceagi.system.spec.tenant.thread.TenantFunctions;
 import com.xspaceagi.system.spec.utils.RedisUtil;
 import jakarta.annotation.PostConstruct;
@@ -30,6 +36,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
@@ -54,6 +61,7 @@ public class SandboxConfigRpcServiceImpl implements ISandboxConfigRpcService {
     @Resource
     private RedisUtil redisUtil;
 
+    private final AtomicInteger sandboxIndex = new AtomicInteger(0);
 
     @PostConstruct
     public void init() {
@@ -125,6 +133,7 @@ public class SandboxConfigRpcServiceImpl implements ISandboxConfigRpcService {
         queryWrapper.eq(SandboxConfig::getScope, SandboxScopeEnum.GLOBAL)
                 .eq(SandboxConfig::getIsActive, true)
                 .eq(SandboxConfig::getTenantId, tenantId)
+                .eq(SandboxConfig::getType, "Agent")
                 .orderByAsc(SandboxConfig::getId);
 
         List<SandboxConfig> configs = TenantFunctions.callWithIgnoreCheck(() -> sandboxConfigService.list(queryWrapper));
@@ -218,4 +227,60 @@ public class SandboxConfigRpcServiceImpl implements ISandboxConfigRpcService {
         }
         return null;
     }
+
+    @Override
+    public SandboxConfigRpcDto selectAppDevelopmentSandbox(Long tenantId, Long userId, Long spaceId, Long projectId, Long sandboxId) {
+        SandboxConfigDto configDto = null;
+        if (sandboxId != null) {
+            configDto = sandboxConfigApplicationService.getById(sandboxId);
+        } else {
+            List<SandboxConfigDto> sandboxConfigs = sandboxConfigApplicationService.listPageDevelopmentSandboxes();
+            if (CollectionUtils.isEmpty(sandboxConfigs)) {
+                return null;
+            }
+            List<SandboxConfigDto> collect = sandboxConfigs.stream().filter(sandboxConfigDto -> {
+                if (CollectionUtils.isEmpty(sandboxConfigDto.getBindItems())) {
+                    return false;
+                }
+                return sandboxConfigDto.getBindItems().stream().anyMatch(bindItem -> {
+                    if (bindItem.getTargetType() == SandboxBindInfoDto.BindTargetType.User && userId.equals(bindItem.getTargetId())) {
+                        return true;
+                    }
+                    return bindItem.getTargetType() == SandboxBindInfoDto.BindTargetType.Space && spaceId.equals(bindItem.getTargetId());
+                });
+            }).toList();
+            if (!collect.isEmpty()) {
+                configDto = collect.get(sandboxIndex.incrementAndGet() % collect.size());
+            } else {
+                sandboxConfigs.removeIf(sandboxConfigDto -> !CollectionUtils.isEmpty(sandboxConfigDto.getBindItems()));
+                if (!sandboxConfigs.isEmpty()) {
+                    configDto = sandboxConfigs.get(sandboxIndex.incrementAndGet() % sandboxConfigs.size());
+                }
+            }
+        }
+        if (configDto == null) {
+            throw BizException.of(ErrorCodeEnum.INVALID_PARAM, BizExceptionCodeEnum.configNotFound);
+        }
+        SandboxConfigRpcDto rpcDto = new SandboxConfigRpcDto();
+        BeanUtils.copyProperties(configDto, rpcDto);
+        SandboxConfigValue configValue = new SandboxConfigValue();
+        BeanUtils.copyProperties(configDto.getConfigValue(), configValue);
+        rpcDto.setConfigValue(configValue);
+        if (configDto.getIsolation() != null) {
+            rpcDto.setIsolation(IsolationEnum.valueOf(configDto.getIsolation()));
+        } else {
+            rpcDto.setIsolation(IsolationEnum.Space);
+        }
+        if (rpcDto.getIsolation() == IsolationEnum.Tenant) {
+            rpcDto.setIsolationKey(tenantId.toString());
+        }
+        if (rpcDto.getIsolation() == IsolationEnum.Space) {
+            rpcDto.setIsolationKey(tenantId + "-" + spaceId.toString());
+        }
+        if (rpcDto.getIsolation() == IsolationEnum.Project) {
+            rpcDto.setIsolationKey(tenantId + "-" + spaceId.toString() + "-" + projectId.toString());
+        }
+        return rpcDto;
+    }
+
 }

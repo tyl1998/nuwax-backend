@@ -16,12 +16,10 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.Serializable;
-import java.util.Date;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 @Data
 @Builder
@@ -188,6 +186,35 @@ public class AgentConfigDto implements Serializable {
         return pageHomeIndex;
     }
 
+    public List<CustomPageMenu> getCustomPageMenus() {
+        List<CustomPageMenu> customPageMenus = new ArrayList<>();
+        //设置默认页面首页
+        if (getAgentComponentConfigList() != null) {
+            for (AgentComponentConfigDto componentConfigDto : getAgentComponentConfigList()) {
+                if (componentConfigDto.getType().equals(AgentComponentConfig.Type.Page)) {
+                    PageBindConfigDto pageBindConfigDto = (PageBindConfigDto) componentConfigDto.getBindConfig();
+                    if (pageBindConfigDto != null) {
+                        CustomPageMenu customPageMenu = buildCustomPageMenu(componentConfigDto, pageBindConfigDto);
+                        customPageMenus.add(customPageMenu);
+                    }
+                }
+            }
+        }
+        return customPageMenus;
+    }
+
+    private @NotNull CustomPageMenu buildCustomPageMenu(AgentComponentConfigDto componentConfigDto, PageBindConfigDto pageBindConfigDto) {
+        CustomPageMenu customPageMenu = new CustomPageMenu();
+        customPageMenu.setName(componentConfigDto.getName());
+        customPageMenu.setIcon(componentConfigDto.getIcon());
+        customPageMenu.setDescription(componentConfigDto.getDescription());
+        customPageMenu.setPath("/page" + pageBindConfigDto.getBasePath() + "-" + getId() + "/prod/");
+        if (pageBindConfigDto.getHomeIndex() == 1) {
+            customPageMenu.setSelected(true);
+        }
+        return customPageMenu;
+    }
+
     public static void convertBindConfig(AgentComponentConfigDto componentConfig) {
         if (componentConfig.getType() == null) {
             return;
@@ -308,5 +335,19 @@ public class AgentConfigDto implements Serializable {
                 }
             }
         }
+    }
+
+    @Data
+    public static class CustomPageMenu {
+        @Schema(description = "菜单名称")
+        private String name;
+        @Schema(description = "菜单图标")
+        private String icon;
+        @Schema(description = "菜单描述")
+        private String description;
+        @Schema(description = "菜单路径")
+        private String path;
+        @Schema(description = "是否选中")
+        private boolean selected;
     }
 }

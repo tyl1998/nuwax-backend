@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.xspaceagi.custompage.application.service.ICustomPageBuildApplicationService;
 import com.xspaceagi.custompage.domain.model.CustomPageBuildModel;
 import com.xspaceagi.custompage.domain.service.ICustomPageBuildDomainService;
+import com.xspaceagi.custompage.sdk.dto.TemplateTypeEnum;
 import com.xspaceagi.system.spec.common.UserContext;
 import com.xspaceagi.system.spec.dto.ReqResult;
 
@@ -87,10 +88,10 @@ public class CustomPageBuildApplicationServiceImpl implements ICustomPageBuildAp
     }
 
     @Override
-    public ReqResult<Map<String, Object>> initProject(Long projectId, UserContext userContext) {
+    public ReqResult<Map<String, Object>> initProject(Long projectId, TemplateTypeEnum templateType, UserContext userContext) {
         log.info("[init Project] project Id={},startinitializeproject artifacts", projectId);
 
-        ReqResult<Map<String, Object>> result = customPageBuildDomainService.initProject(projectId);
+        ReqResult<Map<String, Object>> result = customPageBuildDomainService.initProject(projectId, templateType);
 
         log.info("[init Project] project Id={},startinitializeprojectresponse,result={}", projectId, result);
         return result;

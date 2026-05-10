@@ -47,7 +47,7 @@ public class PluginAndWorkflowApiController {
     private SpaceApplicationService spaceApplicationService;
 
     @Operation(summary = "工作流流式执行接口")
-    @RequestMapping(path = "/api/v1/workflow/{id}/streamExecute", method = RequestMethod.POST, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @RequestMapping(path = "/api/v1/workflow/{id}/sse/execute", method = RequestMethod.POST, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<String> streamExecuteWorkflow(@PathVariable Long id, @RequestBody @Valid Map<String, Object> params, HttpServletResponse response) {
         String requestId = UUID.randomUUID().toString().replace("-", "");
         WorkflowConfigDto workflowConfigDto = workflowApplicationService.queryPublishedWorkflowConfig(id, null, true);

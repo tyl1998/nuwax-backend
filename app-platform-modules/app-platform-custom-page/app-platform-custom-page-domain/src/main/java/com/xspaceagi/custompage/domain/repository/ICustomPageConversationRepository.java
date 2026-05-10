@@ -27,4 +27,14 @@ public interface ICustomPageConversationRepository {
     SuperPage<CustomPageConversationModel> pageQuery(CustomPageConversationModel queryModel, Long current,
             Long pageSize);
 
+    /**
+     * 根据requestId回填用户消息的sessionId
+     */
+    boolean updateUserSessionIdByRequestId(Long projectId, String requestId, String sessionId, Long userId);
+
+    /**
+     * 按项目ID删除会话记录（软删）
+     */
+    boolean deleteByProjectId(Long projectId, Long userId);
+
 }

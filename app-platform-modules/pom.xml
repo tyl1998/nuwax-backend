@@ -23,6 +23,7 @@
         <module>app-platform-model-proxy</module>
         <module>app-platform-memory</module>
         <module>app-platform-im</module>
+        <module>app-platform-file</module>
     </modules>
     <dependencies>
         <dependency>

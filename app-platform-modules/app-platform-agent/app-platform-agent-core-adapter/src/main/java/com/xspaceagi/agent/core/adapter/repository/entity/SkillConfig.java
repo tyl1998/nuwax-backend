@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.xspaceagi.agent.core.adapter.dto.SkillFileDto;
 import com.xspaceagi.agent.core.adapter.typehandler.SkillFileListTypeHandler;
+import com.xspaceagi.system.spec.common.JsonTypeHandlerWithoutType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -32,6 +33,9 @@ public class SkillConfig {
 
     @TableField(value = "files", typeHandler = SkillFileListTypeHandler.class)
     private List<SkillFileDto> files; // 文件内容
+
+    @TableField(value = "ext", typeHandler = JsonTypeHandlerWithoutType.class)
+    private Object ext; // 扩展字段
 
     private Published.PublishStatus publishStatus; // 发布状态
 

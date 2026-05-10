@@ -1,12 +1,14 @@
 package com.xspaceagi.agent.core.application.service;
 
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSONWriter;
 import com.baomidou.dynamic.datasource.annotation.DSTransactional;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.google.common.collect.Lists;
 import com.xspaceagi.agent.core.adapter.application.*;
+import com.xspaceagi.agent.core.adapter.constant.SkillFileFormatConstants;
 import com.xspaceagi.agent.core.adapter.dto.*;
 import com.xspaceagi.agent.core.adapter.dto.config.AgentConfigDto;
 import com.xspaceagi.agent.core.adapter.dto.config.plugin.PluginDto;
@@ -16,6 +18,7 @@ import com.xspaceagi.agent.core.adapter.repository.entity.*;
 import com.xspaceagi.agent.core.domain.service.*;
 import com.xspaceagi.agent.core.infra.rpc.CustomPageRpcService;
 import com.xspaceagi.agent.core.infra.rpc.dto.PageDto;
+import com.xspaceagi.agent.core.adapter.util.SkillNameUtil;
 import com.xspaceagi.agent.core.spec.enums.PluginTypeEnum;
 import com.xspaceagi.agent.core.spec.utils.CopyRelationCacheUtil;
 import com.xspaceagi.system.application.dto.SendNotifyMessageDto;
@@ -33,9 +36,13 @@ import com.xspaceagi.system.spec.enums.ErrorCodeEnum;
 import com.xspaceagi.system.spec.enums.YesOrNoEnum;
 import com.xspaceagi.system.spec.exception.BizException;
 import com.xspaceagi.system.spec.exception.BizExceptionCodeEnum;
+import com.xspaceagi.system.spec.file.InMemoryMultipartFile;
 import com.xspaceagi.system.spec.jackson.JsonSerializeUtil;
 import com.xspaceagi.system.spec.page.SuperPage;
 import com.xspaceagi.system.spec.utils.I18nUtil;
+import com.xspaceagi.file.application.service.FileManagementService;
+import com.xspaceagi.file.domain.model.FileRecordDomain;
+import com.xspaceagi.file.sdk.IFileAccessService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
@@ -45,8 +52,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.net.URI;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import static com.xspaceagi.agent.core.adapter.repository.entity.Published.TargetSubType.ChatBot;
 import static com.xspaceagi.agent.core.adapter.repository.entity.Published.TargetSubType.PageApp;
@@ -101,6 +113,13 @@ public class PublishApplicationServiceImpl implements PublishApplicationService 
     private CustomPageRpcService customPageRpcService;
     @Autowired
     private PublishedRepository publishedRepository;
+    @Resource
+    private FileManagementService fileManagementService;
+    @Resource
+    private IFileAccessService iFileAccessService;
+
+    private static final String TARGET_TYPE_SKILL_PUBLISH_APPLY = "skill_publish_apply";
+    private static final String TARGET_TYPE_SKILL_PUBLISHED = "skill_published";
 
     @Override
     public SuperPage<PublishedDto> queryPublishedList(PublishedQueryDto publishedQueryDto) {
@@ -421,7 +440,15 @@ public class PublishApplicationServiceImpl implements PublishApplicationService 
         BeanUtils.copyProperties(publishApplyDto, publishApply);
         publishApply.setPublishStatus(Published.PublishStatus.Applying);
         // 启用 LargeObject 特性，支持序列化包含大文件内容的配置
-        publishApply.setConfig(JSON.toJSONString(publishApplyDto.getTargetConfig(), JSONWriter.Feature.LargeObject));
+        if (publishApplyDto.getTargetType() == Published.TargetType.Skill) {
+            SkillConfigDto skillConfigDto = skillApplicationService.queryById(publishApplyDto.getTargetId(), true);
+            List<SkillFileDto> snapshotFiles = snapshotSkillFiles(skillConfigDto == null ? List.of() : skillConfigDto.getFiles(),
+                    TARGET_TYPE_SKILL_PUBLISH_APPLY, publishApplyDto.getTargetId());
+            SkillPublishedConfigDto applyConfig = buildSkillConfigPayload(publishApplyDto, snapshotFiles, null);
+            publishApply.setConfig(JSON.toJSONString(applyConfig, JSONWriter.Feature.LargeObject));
+        } else {
+            publishApply.setConfig(JSON.toJSONString(publishApplyDto.getTargetConfig(), JSONWriter.Feature.LargeObject));
+        }
         publishApply.setApplyUserId(publishApplyDto.getApplyUser().getId());
         publishApply.setChannels(JSON.toJSONString(publishApplyDto.getChannels(), JSONWriter.Feature.LargeObject));
         publishDomainService.publishApply(publishApply);
@@ -510,6 +537,14 @@ public class PublishApplicationServiceImpl implements PublishApplicationService 
             accessControlStatus = 0;
         }
         Date now = new Date();
+        String tempSkillPublishedConfigJson = null;
+        if (targetType == Published.TargetType.Skill) {
+            PublishApplyDto sourceDto = publishApplies.get(0);
+            List<SkillFileDto> sourceFiles = resolveSkillPublishSourceFiles(sourceDto);
+            SkillPublishedConfigDto skillPublishedConfig = buildPublishedSkillConfig(sourceDto, sourceFiles);
+            tempSkillPublishedConfigJson = JSON.toJSONString(skillPublishedConfig, JSONWriter.Feature.LargeObject);
+        }
+        final String skillPublishedConfigJson = tempSkillPublishedConfigJson;
         List<Published> publishedList = publishApplies.stream().map(publishApplyDto -> {
             Published published = new Published();
             published.setSpaceId(publishApplyDto.getSpaceId());
@@ -520,8 +555,15 @@ public class PublishApplicationServiceImpl implements PublishApplicationService 
             published.setName(publishApplyDto.getName());
             published.setDescription(publishApplyDto.getDescription());
             published.setIcon(publishApplyDto.getIcon());
+            published.setExt(publishApplyDto.getExt());
             // 启用 LargeObject 特性，支持序列化包含大文件内容的配置
-            published.setConfig((publishApplyDto.getTargetConfig() instanceof String) ? (String) publishApplyDto.getTargetConfig() : JSON.toJSONString(publishApplyDto.getTargetConfig(), JSONWriter.Feature.LargeObject));
+            if (publishApplyDto.getTargetType() == Published.TargetType.Skill) {
+                published.setConfig(skillPublishedConfigJson);
+            } else {
+                published.setConfig((publishApplyDto.getTargetConfig() instanceof String)
+                        ? (String) publishApplyDto.getTargetConfig()
+                        : JSON.toJSONString(publishApplyDto.getTargetConfig(), JSONWriter.Feature.LargeObject));
+            }
             published.setChannel(Published.PublishChannel.System);
             published.setRemark(publishApplyDto.getRemark());
             published.setScope(publishApplyDto.getScope());
@@ -547,6 +589,7 @@ public class PublishApplicationServiceImpl implements PublishApplicationService 
         publishApply.setName(publishApplies.get(0).getName());
         publishApply.setDescription(publishApplies.get(0).getDescription());
         publishApply.setIcon(publishApplies.get(0).getIcon());
+        publishApply.setExt(publishApplies.get(0).getExt());
         publishDomainService.publish(publishApply, publishedList);
         publishApplies.forEach(publishApplyDto -> {
             PublishApply apply = new PublishApply();
@@ -953,6 +996,353 @@ public class PublishApplicationServiceImpl implements PublishApplicationService 
         updateWrapper.eq("target_type", targetType);
         updateWrapper.eq("target_id", targetId);
         publishedRepository.update(published, updateWrapper);
+    }
+
+    private SkillPublishedConfigDto buildPublishedSkillConfig(PublishApplyDto publishApplyDto, List<SkillFileDto> applySnapshotFiles) {
+        List<SkillFileDto> publishedSnapshotFiles = snapshotSkillFiles(applySnapshotFiles, TARGET_TYPE_SKILL_PUBLISHED,
+                publishApplyDto.getTargetId());
+        String skillNameForZip = resolveSkillNameFromSkillMd(publishedSnapshotFiles, publishApplyDto.getName());
+        String zipFileUrl = uploadSkillZip(skillNameForZip, publishedSnapshotFiles, publishApplyDto.getTargetId());
+        return buildSkillConfigPayload(publishApplyDto, publishedSnapshotFiles, zipFileUrl);
+    }
+
+    private SkillPublishedConfigDto buildSkillConfigPayload(PublishApplyDto publishApplyDto, List<SkillFileDto> files, String zipFileUrl) {
+        SkillPublishedConfigDto configDto = new SkillPublishedConfigDto();
+        configDto.setFormat(SkillFileFormatConstants.SKILL_FILES_V2);
+        configDto.setId(publishApplyDto.getTargetId());
+        configDto.setName(publishApplyDto.getName());
+        configDto.setDescription(publishApplyDto.getDescription());
+        configDto.setIcon(publishApplyDto.getIcon());
+        configDto.setFiles(files == null ? List.of() : files);
+        configDto.setZipFileUrl(zipFileUrl);
+        return configDto;
+    }
+
+    private List<SkillFileDto> resolveSkillPublishSourceFiles(PublishApplyDto publishApplyDto) {
+        if (publishApplyDto == null) {
+            return List.of();
+        }
+        // 优先使用 publish_apply 表中 config 快照，避免 targetConfig 对象缺 files 导致空发布
+        if (publishApplyDto.getId() != null) {
+            PublishApply dbApply = publishDomainService.queryPublishApplyById(publishApplyDto.getId());
+            if (dbApply != null && StringUtils.isNotBlank(dbApply.getConfig())) {
+                List<SkillFileDto> fromApplyConfig = parseSkillFileIndexes(dbApply.getConfig());
+                if (isSnapshotSourceFilesValid(fromApplyConfig)) {
+                    return fromApplyConfig;
+                }
+                if (CollectionUtils.isNotEmpty(fromApplyConfig)) {
+                    log.warn("publish_apply.config files invalid, fallback to targetConfig, applyId={}", publishApplyDto.getId());
+                }
+            }
+        }
+        return parseSkillFileIndexes(publishApplyDto.getTargetConfig());
+    }
+
+    private List<SkillFileDto> parseSkillFileIndexes(Object targetConfig) {
+        if (targetConfig == null) {
+            return List.of();
+        }
+        try {
+            if (targetConfig instanceof String str) {
+                if (StringUtils.isBlank(str)) {
+                    return List.of();
+                }
+                String trimmed = str.trim();
+                if (trimmed.startsWith("[")) {
+                    try {
+                        List<Object> list = JSON.parseArray(trimmed, Object.class);
+                        if (CollectionUtils.isNotEmpty(list)) {
+                            return normalizeSkillFileIndexes(list);
+                        }
+                    } catch (Exception ignored) {
+                        // fallback below
+                    }
+                }
+                if (trimmed.startsWith("{")) {
+                    JSONObject jsonObject = JSON.parseObject(trimmed);
+                    if (jsonObject != null && jsonObject.containsKey("files")) {
+                        return normalizeSkillFileIndexes(jsonObject.getJSONArray("files"));
+                    }
+                    SkillFileDto singleFile = toSkillFileDto(jsonObject);
+                    return singleFile == null ? List.of() : List.of(singleFile);
+                }
+                return List.of();
+            }
+            if (targetConfig instanceof Collection<?> c) {
+                return normalizeSkillFileIndexes(c);
+            }
+            if (targetConfig instanceof JSONObject jsonObject && jsonObject.containsKey("files")) {
+                return normalizeSkillFileIndexes(jsonObject.getJSONArray("files"));
+            }
+            if (targetConfig instanceof SkillConfigDto skillConfigDto) {
+                return normalizeSkillFileIndexes(skillConfigDto.getFiles());
+            }
+            if (targetConfig instanceof SkillPublishedConfigDto publishedConfigDto) {
+                return normalizeSkillFileIndexes(publishedConfigDto.getFiles());
+            }
+            if (targetConfig instanceof Map<?, ?> map && map.get("files") instanceof Collection<?> files) {
+                return normalizeSkillFileIndexes(files);
+            }
+        } catch (Exception e) {
+            log.warn("parse skill file index failed", e);
+        }
+        return List.of();
+    }
+
+    private List<SkillFileDto> snapshotSkillFiles(Collection<?> sourceFiles, String targetType, Long skillId) {
+        if (CollectionUtils.isEmpty(sourceFiles)) {
+            return List.of();
+        }
+        List<SkillFileDto> results = new ArrayList<>();
+        for (Object rawFile : sourceFiles) {
+            SkillFileDto sourceFile = toSkillFileDto(rawFile);
+            if (sourceFile == null || StringUtils.isBlank(sourceFile.getName())) {
+                continue;
+            }
+            SkillFileDto snapshotFile = new SkillFileDto();
+            snapshotFile.setName(sourceFile.getName());
+            snapshotFile.setIsDir(Boolean.TRUE.equals(sourceFile.getIsDir()));
+            if (Boolean.TRUE.equals(sourceFile.getIsDir())) {
+                results.add(snapshotFile);
+                continue;
+            }
+            byte[] bytes;
+            if (StringUtils.isNotBlank(sourceFile.getContents())) {
+                bytes = sourceFile.getContents().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            } else {
+                if (StringUtils.isBlank(sourceFile.getFileProxyUrl())) {
+                    log.warn("invalid skill file index, missing file source, targetType={}, skillId={}, fileName={}",
+                            targetType, skillId, sourceFile.getName());
+                    throw BizException.of(ErrorCodeEnum.INVALID_PARAM, BizExceptionCodeEnum.agentSkillConfigParseFailed);
+                }
+                bytes = downloadFileBytes(sourceFile.getFileProxyUrl());
+            }
+            FileRecordDomain fileRecord = uploadBytes(bytes, sourceFile.getName(), targetType, skillId);
+            snapshotFile.setFileProxyUrl(fileRecord.getFileUrl());
+            results.add(snapshotFile);
+        }
+        return results;
+    }
+
+    private List<SkillFileDto> normalizeSkillFileIndexes(Collection<?> files) {
+        if (CollectionUtils.isEmpty(files)) {
+            return List.of();
+        }
+        List<SkillFileDto> results = new ArrayList<>();
+        for (Object item : files) {
+            SkillFileDto file = toSkillFileDto(item);
+            if (file == null || StringUtils.isBlank(file.getName())) {
+                continue;
+            }
+            results.add(file);
+        }
+        return results;
+    }
+
+    private SkillFileDto toSkillFileDto(Object item) {
+        if (item == null) {
+            return null;
+        }
+        if (item instanceof SkillFileDto skillFileDto) {
+            return skillFileDto;
+        }
+        if (item instanceof JSONObject jsonObject && jsonObject.containsKey("files")) {
+            // 配置对象，不是文件索引
+            return null;
+        }
+        if (item instanceof Map<?, ?> map && map.containsKey("files")) {
+            // 配置对象，不是文件索引
+            return null;
+        }
+        if (item instanceof String str) {
+            String value = str.trim();
+            if (StringUtils.isBlank(value)) {
+                return null;
+            }
+            if (value.startsWith("{") && value.endsWith("}")) {
+                try {
+                    JSONObject obj = JSON.parseObject(value);
+                    if (obj != null && obj.containsKey("files")) {
+                        return null;
+                    }
+                    SkillFileDto dto = JSON.parseObject(value, SkillFileDto.class);
+                    if (dto != null && StringUtils.isNotBlank(dto.getName())) {
+                        return dto;
+                    }
+                } catch (Exception ignored) {
+                    // fallback to plain path
+                }
+            }
+            SkillFileDto dto = new SkillFileDto();
+            if (value.endsWith("/")) {
+                dto.setName(value.substring(0, value.length() - 1));
+                dto.setIsDir(true);
+            } else {
+                dto.setName(value);
+                dto.setIsDir(false);
+            }
+            return dto;
+        }
+        try {
+            SkillFileDto dto = JSON.parseObject(JSON.toJSONString(item), SkillFileDto.class);
+            if (dto != null && StringUtils.isNotBlank(dto.getName())) {
+                return dto;
+            }
+        } catch (Exception ignored) {
+            // ignore malformed element
+        }
+        return null;
+    }
+
+    private boolean isSnapshotSourceFilesValid(List<SkillFileDto> files) {
+        if (CollectionUtils.isEmpty(files)) {
+            return false;
+        }
+        return files.stream().allMatch(file ->
+                file != null
+                        && StringUtils.isNotBlank(file.getName())
+                        && (Boolean.TRUE.equals(file.getIsDir())
+                        || StringUtils.isNotBlank(file.getFileProxyUrl())
+                        || StringUtils.isNotBlank(file.getContents())));
+    }
+
+    private String uploadSkillZip(String skillName, List<SkillFileDto> files, Long skillId) {
+        byte[] zipBytes = buildZipBytes(skillName, files);
+        String zipFileName = skillName + ".zip";
+        FileRecordDomain fileRecord = uploadBytes(zipBytes, zipFileName, TARGET_TYPE_SKILL_PUBLISHED, skillId);
+        return fileRecord.getFileUrl();
+    }
+
+    private byte[] buildZipBytes(String skillName, List<SkillFileDto> files) {
+        if (CollectionUtils.isEmpty(files)) {
+            return new byte[0];
+        }
+        String folderName = StringUtils.isBlank(skillName) ? "skill" : skillName;
+        String baseDir = folderName.endsWith("/") ? folderName : folderName + "/";
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
+             ZipOutputStream zos = new ZipOutputStream(baos, java.nio.charset.StandardCharsets.UTF_8)) {
+            Set<String> addedEntries = new HashSet<>();
+            for (SkillFileDto file : files) {
+                if (file == null || StringUtils.isBlank(file.getName())) {
+                    continue;
+                }
+                String normalizedName = file.getName().startsWith("/") ? file.getName().substring(1) : file.getName();
+                String entryName = baseDir + normalizedName;
+                if (Boolean.TRUE.equals(file.getIsDir())) {
+                    if (!entryName.endsWith("/")) {
+                        entryName = entryName + "/";
+                    }
+                    if (addedEntries.add(entryName)) {
+                        zos.putNextEntry(new ZipEntry(entryName));
+                        zos.closeEntry();
+                    }
+                    continue;
+                }
+                ensureZipParentDirectories(zos, entryName, baseDir, addedEntries);
+                if (!addedEntries.add(entryName)) {
+                    continue;
+                }
+                zos.putNextEntry(new ZipEntry(entryName));
+                byte[] bytes = downloadFileBytes(file.getFileProxyUrl());
+                zos.write(bytes);
+                zos.closeEntry();
+            }
+            zos.finish();
+            return baos.toByteArray();
+        } catch (Exception e) {
+            log.error("build skill zip failed", e);
+            return new byte[0];
+        }
+    }
+
+    private void ensureZipParentDirectories(ZipOutputStream zos, String entryName, String baseDir, Set<String> addedEntries) throws Exception {
+        String relativePath = entryName.startsWith(baseDir) ? entryName.substring(baseDir.length()) : entryName;
+        if (!relativePath.contains("/")) {
+            return;
+        }
+        String[] pathParts = relativePath.split("/");
+        StringBuilder currentPath = new StringBuilder(baseDir);
+        for (int i = 0; i < pathParts.length - 1; i++) {
+            if (StringUtils.isBlank(pathParts[i])) {
+                continue;
+            }
+            currentPath.append(pathParts[i]).append("/");
+            String dirPath = currentPath.toString();
+            if (addedEntries.add(dirPath)) {
+                zos.putNextEntry(new ZipEntry(dirPath));
+                zos.closeEntry();
+            }
+        }
+    }
+
+    private FileRecordDomain uploadBytes(byte[] bytes, String path, String targetType, Long skillId) {
+        String fileName = path;
+        int idx = path.lastIndexOf('/');
+        if (idx >= 0 && idx < path.length() - 1) {
+            fileName = path.substring(idx + 1);
+        }
+        String contentType = fileName.endsWith(".zip") ? "application/zip" : "application/octet-stream";
+        InMemoryMultipartFile multipartFile = new InMemoryMultipartFile("file", fileName, contentType, bytes);
+        Long tenantId = RequestContext.get() != null ? RequestContext.get().getTenantId() : null;
+        Long userId = RequestContext.get() != null ? RequestContext.get().getUserId() : null;
+        return fileManagementService.uploadFile(multipartFile, tenantId, userId, targetType, skillId, path, true);
+    }
+
+    private byte[] downloadFileBytes(String fileProxyUrl) {
+        if (StringUtils.isBlank(fileProxyUrl)) {
+            return new byte[0];
+        }
+        String fileKey = extractFileKey(fileProxyUrl);
+        if (StringUtils.isNotBlank(fileKey)) {
+            try (InputStream inputStream = fileManagementService.downloadFile(fileKey)) {
+                if (inputStream != null) {
+                    return readAllBytes(inputStream);
+                }
+            } catch (Exception e) {
+                log.warn("download file failed by key={}", fileKey, e);
+            }
+        }
+        try (InputStream inputStream = new URI(fileProxyUrl).toURL().openStream()) {
+            return readAllBytes(inputStream);
+        } catch (Exception e) {
+            log.warn("download file failed by url={}", fileProxyUrl, e);
+            return new byte[0];
+        }
+    }
+
+    private String resolveSkillNameFromSkillMd(List<SkillFileDto> files, String fallbackName) {
+        SkillConfigDto skillConfigDto = new SkillConfigDto();
+        skillConfigDto.setFiles(files);
+        skillConfigDto.setEnName(fallbackName);
+        skillConfigDto.setName(fallbackName);
+        SkillNameUtil.backfillName(skillConfigDto, iFileAccessService);
+        return StringUtils.defaultIfBlank(skillConfigDto.getEnName(), skillConfigDto.getName());
+    }
+
+    private byte[] readAllBytes(InputStream inputStream) throws Exception {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        byte[] buffer = new byte[4096];
+        int len;
+        while ((len = inputStream.read(buffer)) != -1) {
+            outputStream.write(buffer, 0, len);
+        }
+        return outputStream.toByteArray();
+    }
+
+    private String extractFileKey(String fileProxyUrl) {
+        if (StringUtils.isBlank(fileProxyUrl)) {
+            return null;
+        }
+        String value = fileProxyUrl;
+        int queryIdx = value.indexOf('?');
+        if (queryIdx > -1) {
+            value = value.substring(0, queryIdx);
+        }
+        int markerIdx = value.indexOf("/api/f/");
+        if (markerIdx > -1) {
+            return value.substring(markerIdx + "/api/f/".length());
+        }
+        return value.startsWith("/") ? value : "/" + value;
     }
 
     private String generateTargetTypeKey(Published.TargetType targetType) {

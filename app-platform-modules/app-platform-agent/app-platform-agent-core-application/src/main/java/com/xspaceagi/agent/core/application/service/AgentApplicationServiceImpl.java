@@ -975,6 +975,7 @@ public class AgentApplicationServiceImpl implements AgentApplicationService {
             agentDetailDto.setHideChatArea(1);
         }
         agentDetailDto.setPageHomeIndex(agentConfigDto.getPageHomeIndex());
+        agentDetailDto.setCustomPageMenus(agentConfigDto.getCustomPageMenus());
         agentDetailDto.setType(agentConfigDto.getType());
         Map<String, Object> variablesMap = new HashMap<>();
         if (RequestContext.get() != null && RequestContext.get().getUser() != null) {
@@ -1350,6 +1351,13 @@ public class AgentApplicationServiceImpl implements AgentApplicationService {
                             pageBindConfigDto.setVisibleToLLM(1);
                             pageBindConfigDto.setHomeIndex(0);
                             agentComponentConfigDto.setBindConfig(pageBindConfigDto);
+                        } else {
+                            if (StringUtils.isNotBlank(pageBindConfigDto.getPageName())) {
+                                agentComponentConfigDto.setName(pageBindConfigDto.getPageName());
+                            }
+                            if (StringUtils.isNotBlank(pageBindConfigDto.getPageIcon())) {
+                                agentComponentConfigDto.setIcon(pageBindConfigDto.getPageIcon());
+                            }
                         }
                         pageBindConfigDto.setPageArgConfigs(pageDto.getPageArgConfigs());
                         pageBindConfigDto.setBasePath(pageDto.getBasePath());

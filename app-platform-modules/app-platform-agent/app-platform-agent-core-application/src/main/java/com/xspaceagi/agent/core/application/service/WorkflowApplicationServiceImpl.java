@@ -42,7 +42,7 @@ import com.xspaceagi.system.spec.enums.ErrorCodeEnum;
 import com.xspaceagi.system.spec.exception.BizException;
 import com.xspaceagi.system.spec.exception.BizExceptionCodeEnum;
 import com.xspaceagi.system.spec.jackson.JsonSerializeUtil;
-import com.xspaceagi.system.spec.utils.FileAkUtil;
+import com.xspaceagi.file.sdk.IFileAccessService;
 import com.xspaceagi.system.spec.utils.I18nUtil;
 import com.xspaceagi.system.spec.utils.RedisUtil;
 import com.xspaceagi.system.spec.utils.TimeWheel;
@@ -108,7 +108,7 @@ public class WorkflowApplicationServiceImpl implements WorkflowApplicationServic
     private TimeWheel timeWheel;
 
     @Resource
-    private FileAkUtil fileAkUtil;
+    private IFileAccessService iFileAccessService;
 
     @Resource
     private WorkflowExecutor workflowExecutor;
@@ -2481,7 +2481,7 @@ public class WorkflowApplicationServiceImpl implements WorkflowApplicationServic
                 workflowExecuteRequestDto.getParams().forEach((key, value) -> {
                     if (value instanceof String fileUrl) {
                         if (fileUrl.startsWith("http")) {
-                            fileUrl = fileAkUtil.getFileUrlWithAk(fileUrl);
+                            fileUrl = iFileAccessService.getFileUrlWithAk(fileUrl);
                             workflowExecuteRequestDto.getParams().put(key, fileUrl);
                         }
                     }

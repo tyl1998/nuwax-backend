@@ -36,6 +36,9 @@ public class PublishApplyDto implements Serializable {
     @Schema(description = "图标")
     private String icon;
 
+    @Schema(description = "扩展字段")
+    private Object ext;
+
     //该字段已没有实际作用，后续弃用
     @Schema(description = "发布渠道")
     private List<Published.PublishChannel> channels;

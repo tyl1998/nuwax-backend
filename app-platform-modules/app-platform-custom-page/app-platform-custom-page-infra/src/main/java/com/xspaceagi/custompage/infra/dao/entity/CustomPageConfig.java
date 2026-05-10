@@ -61,6 +61,8 @@ public class CustomPageConfig {
     @TableField(value = "data_sources", typeHandler = DataSourceListTypeHandler.class)
     private List<DataSourceDto> dataSources;
 
+    private Long sandboxId;
+
     @TableField(value = "ext", typeHandler = JsonTypeHandlerWithoutType.class)
     private Object ext;
 

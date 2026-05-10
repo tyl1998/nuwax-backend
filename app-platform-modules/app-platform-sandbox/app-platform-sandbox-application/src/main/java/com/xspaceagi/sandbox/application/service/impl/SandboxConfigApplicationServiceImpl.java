@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xspaceagi.agent.core.sdk.IAgentRpcService;
 import com.xspaceagi.agent.core.sdk.dto.ReqResult;
+import com.xspaceagi.sandbox.application.dto.SandboxBindInfoDto;
 import com.xspaceagi.sandbox.application.dto.SandboxConfigDto;
 import com.xspaceagi.sandbox.application.dto.SandboxConfigQueryDto;
 import com.xspaceagi.sandbox.application.dto.SandboxGlobalConfigDto;
@@ -151,6 +152,15 @@ public class SandboxConfigApplicationServiceImpl implements SandboxConfigApplica
             }
         });
         return collect;
+    }
+
+    @Override
+    public List<SandboxConfigDto> listPageDevelopmentSandboxes() {
+        List<SandboxConfig> configs = sandboxConfigService.queryGlobalConfigs(true);
+        configs.removeIf(config -> "Agent".equals(config.getType()));
+        return configs.stream()
+                .map(this::convertToDto)
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -389,6 +399,14 @@ public class SandboxConfigApplicationServiceImpl implements SandboxConfigApplica
             }
         }
 
+        if (entity.getBindInfo() != null) {
+            try {
+                dto.setBindItems(JSON.parseArray(entity.getBindInfo(), SandboxBindInfoDto.class));
+            } catch (Exception e) {
+                log.warn("关系绑定数据解析失败 {}", entity.getBindInfo());
+            }
+        }
+
         if (entity.getScope() == SandboxScopeEnum.USER) {
             dto.setOnline(reverseServerContainer.getUserSandboxAliveTime(entity.getConfigKey()) != null);
         }
@@ -407,6 +425,13 @@ public class SandboxConfigApplicationServiceImpl implements SandboxConfigApplica
                 entity.setConfigValue(JSON.toJSONString(dto.getConfigValue()));
             } catch (Exception e) {
                 log.error("序列化配置值失败", e);
+            }
+        }
+        if (dto.getBindItems() != null) {
+            try {
+                entity.setBindInfo(JSON.toJSONString(dto.getBindItems()));
+            } catch (Exception e) {
+                log.warn("关系绑定数据转换失败 {}", dto.getBindItems());
             }
         }
         return entity;

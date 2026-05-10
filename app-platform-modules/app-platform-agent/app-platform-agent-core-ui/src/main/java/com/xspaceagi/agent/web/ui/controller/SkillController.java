@@ -5,6 +5,7 @@ import com.xspaceagi.agent.core.adapter.application.PublishApplicationService;
 import com.xspaceagi.agent.core.adapter.application.SkillApplicationService;
 import com.xspaceagi.agent.core.adapter.dto.*;
 import com.xspaceagi.agent.core.adapter.repository.entity.Published;
+import com.xspaceagi.agent.core.spec.enums.UsageScenarioEnum;
 import com.xspaceagi.agent.core.spec.utils.FileTypeUtils;
 import com.xspaceagi.agent.web.ui.controller.util.SpaceObjectPermissionUtil;
 import com.xspaceagi.agent.web.ui.dto.SkillAddDto;
@@ -45,6 +46,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static com.xspaceagi.system.spec.enums.ResourceEnum.*;
@@ -87,9 +89,9 @@ public class SkillController {
         }
 
         spacePermissionService.checkSpaceUserPermission(skillAddDto.getSpaceId());
-
         SkillConfigDto skillConfigDto = new SkillConfigDto();
         BeanUtils.copyProperties(skillAddDto, skillConfigDto);
+        skillConfigDto.setExt(convertExtArray(skillAddDto.getUsageScenarios(), true));
 
         // 如果原技能没有任何文件，把上传的文件和默认模板文件都加到 files 中
         if (CollectionUtils.isEmpty(skillConfigDto.getFiles())) {
@@ -105,7 +107,7 @@ public class SkillController {
     @RequireResource(SKILL_MODIFY)
     @Operation(summary = "修改技能")
     @PostMapping(value = "/update", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ReqResult<Void> update(@RequestBody SkillUpdateDto skillUpdateDto) {
+    public ReqResult<Void> update(@RequestBody @Valid SkillUpdateDto skillUpdateDto) {
         checkSkillPermission(skillUpdateDto.getId());
 
         if (skillUpdateDto.getName() != null) {
@@ -116,6 +118,9 @@ public class SkillController {
 
         SkillConfigDto skillConfigDto = new SkillConfigDto();
         BeanUtils.copyProperties(skillUpdateDto, skillConfigDto);
+        if (skillUpdateDto.getUsageScenarios() != null) {
+            skillConfigDto.setExt(convertExtArray(skillUpdateDto.getUsageScenarios(), false));
+        }
 
         skillConfigDto.setModifiedId(RequestContext.get().getUserId());
         skillConfigDto.setModifiedName(RequestContext.get().getUserContext().getUserName());
@@ -135,10 +140,10 @@ public class SkillController {
             throw new IllegalArgumentException("Invalid skillId");
         }
 
-        // 检查单个文件大小，限制为 20M
-        long maxSingleFileSize = 20L * 1024 * 1024;
+        // 检查单个文件大小，限制为 80M
+        long maxSingleFileSize = 80L * 1024 * 1024;
         if (file.getSize() >= maxSingleFileSize) {
-            throw new IllegalArgumentException("Skill package size must not exceed 20 MB");
+            throw new IllegalArgumentException("Skill package size must not exceed 80 MB");
         }
 
         // 检查技能权限
@@ -147,11 +152,11 @@ public class SkillController {
         // 计算现有文件的总大小
         long existingTotalSize = calculateTotalFileSize(exist.getFiles());
 
-        // 检查新文件 + 原文件总大小，限制为 30M
-        long maxTotalSize = 30L * 1024 * 1024;
+        // 检查新文件 + 原文件总大小，限制为 80M
+        long maxTotalSize = 80L * 1024 * 1024;
         long newFileSize = file.getSize();
         if (existingTotalSize + newFileSize > maxTotalSize) {
-            throw new IllegalArgumentException("Skill package size must not exceed 20 MB");
+            throw new IllegalArgumentException("Skill package size must not exceed 80 MB");
         }
 
         List<SkillFileDto> updateFiles = new ArrayList<>();
@@ -168,7 +173,7 @@ public class SkillController {
             }
         }
 
-        SkillFileDto uploadFileDto = skillApplicationService.processUploadFile(file, filePath);
+        SkillFileDto uploadFileDto = skillApplicationService.processUploadFile(file, filePath, skillId);
         uploadFileDto.setOperation("create");
         updateFiles.add(uploadFileDto);
 
@@ -196,15 +201,15 @@ public class SkillController {
             throw new IllegalArgumentException("Invalid skillId");
         }
 
-        // 检查单个文件大小，限制为 20M
-        long maxSingleFileSize = 20L * 1024 * 1024;
+        // 检查单个文件大小，限制为 80M
+        long maxSingleFileSize = 80L * 1024 * 1024;
         long newFilesTotalSize = 0L;
         for (MultipartFile file : files) {
             if (file == null || file.isEmpty()) {
                 continue;
             }
             if (file.getSize() >= maxSingleFileSize) {
-                throw new IllegalArgumentException("Skill package size must not exceed 20 MB");
+                throw new IllegalArgumentException("Skill package size must not exceed 80 MB");
             }
             newFilesTotalSize += file.getSize();
         }
@@ -215,10 +220,10 @@ public class SkillController {
         // 计算现有文件的总大小
         long existingTotalSize = calculateTotalFileSize(exist.getFiles());
 
-        // 检查新文件 + 原文件总大小，限制为 30M
-        long maxTotalSize = 30L * 1024 * 1024;
+        // 检查新文件 + 原文件总大小，限制为 80M
+        long maxTotalSize = 80L * 1024 * 1024;
         if (existingTotalSize + newFilesTotalSize > maxTotalSize) {
-            throw new IllegalArgumentException("Skill package size must not exceed 20 MB");
+            throw new IllegalArgumentException("Skill package size must not exceed 80 MB");
         }
 
         List<SkillFileDto> updateFiles = new ArrayList<>();
@@ -239,15 +244,24 @@ public class SkillController {
             MultipartFile file = files.get(i);
             String filePath = filePaths.get(i);
 
-            if (file == null || file.isEmpty()) {
-                throw new IllegalArgumentException("Empty file found; fix and upload again");
-            }
             if (filePath == null || filePath.trim().isEmpty()) {
                 throw new IllegalArgumentException("Invalid filePath found; fix and upload again");
             }
-
-            SkillFileDto uploadFileDto = skillApplicationService.processUploadFile(file, filePath);
+            boolean isDir = filePath.endsWith("/");
+            if (file == null || file.isEmpty()) {
+                if (!isDir) {
+                    throw new IllegalArgumentException("Empty file found; fix and upload again");
+                }
+                SkillFileDto dirDto = new SkillFileDto();
+                dirDto.setName(filePath.substring(0, filePath.length() - 1));
+                dirDto.setIsDir(true);
+                dirDto.setOperation("create");
+                updateFiles.add(dirDto);
+                continue;
+            }
+            SkillFileDto uploadFileDto = skillApplicationService.processUploadFile(file, filePath, skillId);
             uploadFileDto.setOperation("create");
+            uploadFileDto.setIsDir(false);
             updateFiles.add(uploadFileDto);
         }
 
@@ -277,6 +291,7 @@ public class SkillController {
         SkillConfigDto skillConfigDto = checkSkillPermission(skillId);
         SkillDto skillDto = new SkillDto();
         BeanUtils.copyProperties(skillConfigDto, skillDto);
+        skillDto.setUsageScenarios(parseUsageScenarios(skillConfigDto.getExt()));
         skillDto.setIcon(DefaultIconUrlUtil.setDefaultIconUrl(skillConfigDto.getIcon(), skillConfigDto.getName()));
         SpaceUserDto spaceUserDto = spaceApplicationService.querySpaceUser(skillConfigDto.getSpaceId(), RequestContext.get().getUserId());
         skillDto.setPermissions(SpaceObjectPermissionUtil.generatePermissionList(spaceUserDto, skillConfigDto.getCreatorId()).stream().map(permission -> permission.name()).collect(Collectors.toList()));
@@ -300,6 +315,7 @@ public class SkillController {
         return ReqResult.success(skills.stream().map(skill -> {
             SkillDto skillDto = new SkillDto();
             BeanUtils.copyProperties(skill, skillDto);
+            skillDto.setUsageScenarios(parseUsageScenarios(skill.getExt()));
             skillDto.setIcon(DefaultIconUrlUtil.setDefaultIconUrl(skill.getIcon(), skill.getName(), "skill"));
             return skillDto;
         }).collect(Collectors.toList()));
@@ -326,6 +342,7 @@ public class SkillController {
     public ReqResult<Long> importSkill(@RequestParam("file") MultipartFile file,
                                          @RequestParam(value = "targetSkillId", required = false) Long targetSkillId,
                                          @RequestParam(value = "targetSpaceId", required = false) Long targetSpaceId,
+                                         @RequestParam(value = "usageScenarios", required = false) List<UsageScenarioEnum> usageScenarios,
                                          HttpServletRequest request) throws IOException {
         if (file.isEmpty()) {
             throw new IllegalArgumentException("Please select a file to upload");
@@ -352,7 +369,8 @@ public class SkillController {
             spacePermissionService.checkSpaceUserPermission(targetSpaceId);
         }
 
-        Long resultId = skillApplicationService.importSkill(file, existSkill, targetSpaceId);
+        SkillExtDto importExt = parseImportExt(usageScenarios);
+        Long resultId = skillApplicationService.importSkill(file, existSkill, targetSpaceId, importExt);
         return ReqResult.success(resultId);
     }
 
@@ -421,6 +439,7 @@ public class SkillController {
             SkillConfigDto skillConfigDto = skillApplicationService.getSkillTemplate(inputStream);
             SkillDto skillDto = new SkillDto();
             BeanUtils.copyProperties(skillConfigDto, skillDto);
+            skillDto.setUsageScenarios(parseUsageScenarios(skillConfigDto.getExt()));
             return ReqResult.success(skillDto);
         } catch (Exception e) {
             log.error("Failed to read skill template", e);
@@ -460,6 +479,71 @@ public class SkillController {
             throw new IllegalArgumentException("User has no personal space");
         }
         return personalSpace.getId();
+    }
+
+    private SkillExtDto parseImportExt(List<UsageScenarioEnum> usageScenarios) {
+        if (usageScenarios == null || usageScenarios.isEmpty()) {
+            return buildDefaultSkillExt();
+        }
+        return convertExtArray(usageScenarios, true);
+    }
+
+    private SkillExtDto buildDefaultSkillExt() {
+        SkillExtDto skillExtDto = new SkillExtDto();
+        skillExtDto.setSupportTaskAgent(1);
+        skillExtDto.setSupportPageApp(0);
+        return skillExtDto;
+    }
+
+    private SkillExtDto convertExtArray(List<UsageScenarioEnum> extArray, boolean useDefaultWhenEmpty) {
+        if (extArray == null || extArray.isEmpty()) {
+            return useDefaultWhenEmpty ? buildDefaultSkillExt() : null;
+        }
+        SkillExtDto ext = new SkillExtDto();
+        ext.setSupportTaskAgent(extArray.contains(UsageScenarioEnum.TaskAgent) ? 1 : 0);
+        ext.setSupportPageApp(extArray.contains(UsageScenarioEnum.PageApp) ? 1 : 0);
+        return ext;
+    }
+
+    private List<UsageScenarioEnum> parseUsageScenarios(Object ext) {
+        List<UsageScenarioEnum> usageScenarios = new ArrayList<>();
+        if (ext == null) {
+            usageScenarios.add(UsageScenarioEnum.TaskAgent);
+            return usageScenarios;
+        }
+        if (ext instanceof SkillExtDto skillExtDto) {
+            if (Integer.valueOf(1).equals(skillExtDto.getSupportTaskAgent())) {
+                usageScenarios.add(UsageScenarioEnum.TaskAgent);
+            }
+            if (Integer.valueOf(1).equals(skillExtDto.getSupportPageApp())) {
+                usageScenarios.add(UsageScenarioEnum.PageApp);
+            }
+            return usageScenarios;
+        }
+        if (!(ext instanceof java.util.Map<?, ?> extMap)) {
+            return usageScenarios;
+        }
+        if (Objects.equals(parseExtInt(extMap.get("supportTaskAgent")), 1)) {
+            usageScenarios.add(UsageScenarioEnum.TaskAgent);
+        }
+        if (Objects.equals(parseExtInt(extMap.get("supportPageApp")), 1)) {
+            usageScenarios.add(UsageScenarioEnum.PageApp);
+        }
+        return usageScenarios;
+    }
+
+    private Integer parseExtInt(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return Integer.parseInt(value.toString());
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     /**

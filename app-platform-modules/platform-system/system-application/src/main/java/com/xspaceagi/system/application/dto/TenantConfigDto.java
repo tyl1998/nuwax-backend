@@ -150,6 +150,8 @@ public class TenantConfigDto implements Serializable {
     private String officialWorkflowIds;
     private String officialSkillIds;
 
+    private boolean isCommercialEdition;
+
     public enum AuthTypeEnum {
         PHONE(1, "手机"),
         CAS(2, "CAS"),

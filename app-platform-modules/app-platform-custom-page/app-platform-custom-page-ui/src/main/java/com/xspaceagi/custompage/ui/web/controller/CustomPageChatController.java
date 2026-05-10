@@ -215,8 +215,9 @@ public class CustomPageChatController extends BaseController {
     @Operation(summary = "Agent session notification (SSE)", description = "Open SSE for real-time notifications for a session")
     @GetMapping(value = "/ai-session-sse", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter startSessionSse(@RequestParam("session_id") String sessionId,
+                                      @RequestParam("project_id") Long projectId,
                                       HttpServletResponse response) {
-        log.info("[Web] Session SSE connected, session Id={}", sessionId);
+        log.info("[Web] Session SSE connected, session Id={}, project Id={}", sessionId, projectId);
 
         // 设置SSE相关的响应头
         response.setHeader("Cache-Control", "no-cache");
@@ -229,7 +230,7 @@ public class CustomPageChatController extends BaseController {
         response.setHeader("Access-Control-Allow-Credentials", "true");
 
         UserContext userContext = getUser();
-        SseEmitter emitter = customPageChatApplicationService.startAgentSessionSse(sessionId, userContext);
+        SseEmitter emitter = customPageChatApplicationService.startAgentSessionSse(sessionId, projectId, userContext);
 
         sseConnectionManager.addConnection(sessionId, emitter);
         Long tenantId = RequestContext.get().getTenantId();
@@ -300,7 +301,7 @@ public class CustomPageChatController extends BaseController {
             return customPageChatApplicationService.stopAgent(projectId, userContext);
         } catch (Exception e) {
             log.error("[Web] Agent stop error, project Id={}", projectId, e);
-            return ReqResult.error("0001", "Stop Agent service exception: " + e.getMessage());
+            return ReqResult.error("0001", e.getMessage());
         }
     }
 
@@ -372,22 +373,8 @@ public class CustomPageChatController extends BaseController {
     @Operation(summary = "Save conversation", description = "Save a user conversation record")
     @PostMapping(value = "/save-conversation", produces = MediaType.APPLICATION_JSON_VALUE)
     public ReqResult<Void> saveConversation(@RequestBody SaveConversationReq req) {
-        log.info("[Web] Received save conversation request, project Id={}", req.getProjectId());
-        try {
-            CustomPageConversationModel model = new CustomPageConversationModel();
-            model.setProjectId(req.getProjectId());
-            model.setTopic(req.getTopic());
-            model.setContent(req.getContent());
-
-            UserContext userContext = getUser();
-            return customPageChatApplicationService.saveConversation(model, userContext);
-        } catch (SpacePermissionException e) {
-            log.error("[Web] Failed to save conversation, project Id={}, {}", req.getProjectId(), e.getMessage());
-            return ReqResult.error(e.getCode(), e.getMessage());
-        } catch (Exception e) {
-            log.error("[Web] Failed to save conversation, project Id={}", req.getProjectId(), e);
-            return ReqResult.error("0001", "Save conversation record failed: " + e.getMessage());
-        }
+        log.warn("[Web] save-conversation is deprecated and ignored, project Id={}", req.getProjectId());
+        return ReqResult.success();
     }
 
     @RequireResource(PAGE_APP_QUERY_DETAIL)
@@ -409,10 +396,14 @@ public class CustomPageChatController extends BaseController {
             return ReqResult.success(result.getData().stream()
                     .map(m -> {
                         ConversationRes res = new ConversationRes();
+                        res.setId(m.getId());
                         res.setProjectId(m.getProjectId());
                         res.setConversationId(m.getId());
                         res.setTopic(m.getTopic());
                         res.setContent(m.getContent());
+                        res.setRole(m.getRole());
+                        res.setSessionId(m.getSessionId());
+                        res.setRequestId(m.getRequestId());
                         res.setCreated(m.getCreated());
                         res.setCreatorId(m.getCreatorId());
                         return res;
@@ -467,10 +458,14 @@ public class CustomPageChatController extends BaseController {
                 conversationResList = result.getData().getRecords().stream()
                         .map(m -> {
                             ConversationRes res = new ConversationRes();
+                            res.setId(m.getId());
                             res.setProjectId(m.getProjectId());
                             res.setConversationId(m.getId());
                             res.setTopic(m.getTopic());
                             res.setContent(m.getContent());
+                            res.setRole(m.getRole());
+                            res.setSessionId(m.getSessionId());
+                            res.setRequestId(m.getRequestId());
                             res.setCreated(m.getCreated());
                             res.setCreatorId(m.getCreatorId());
                             return res;

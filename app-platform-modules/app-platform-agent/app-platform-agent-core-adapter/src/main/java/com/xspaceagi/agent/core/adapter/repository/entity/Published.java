@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.xspaceagi.system.spec.common.JsonTypeHandlerWithoutType;
 import com.xspaceagi.system.spec.utils.I18nUtil;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -45,6 +46,9 @@ public class Published {
     private String icon;
 
     private String config;
+
+    @TableField(value = "ext", typeHandler = JsonTypeHandlerWithoutType.class)
+    private Object ext;
 
     private String remark;
 

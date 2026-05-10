@@ -3,13 +3,16 @@ package com.xspaceagi.agent.core.application.service;
 import com.alibaba.fastjson2.JSON;
 import com.xspaceagi.agent.core.adapter.application.AgentWorkspaceApplicationService;
 import com.xspaceagi.agent.core.adapter.application.PublishApplicationService;
+import com.xspaceagi.agent.core.adapter.constant.SkillFileFormatConstants;
 import com.xspaceagi.agent.core.adapter.dto.*;
 import com.xspaceagi.agent.core.adapter.repository.entity.Published;
 import com.xspaceagi.agent.core.adapter.repository.entity.SkillConfig;
 import com.xspaceagi.agent.core.domain.service.SkillDomainService;
 import com.xspaceagi.agent.core.infra.rpc.SkillFileClient;
+import com.xspaceagi.agent.core.adapter.util.SkillNameUtil;
 import com.xspaceagi.agent.core.spec.utils.FileTypeUtils;
 import com.xspaceagi.agent.core.spec.utils.MarkdownExtractUtil;
+import com.xspaceagi.file.sdk.IFileAccessService;
 import com.xspaceagi.system.spec.enums.ErrorCodeEnum;
 import com.xspaceagi.system.spec.exception.BizException;
 import com.xspaceagi.system.spec.exception.BizExceptionCodeEnum;
@@ -23,21 +26,25 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
 @Slf4j
 @Service
 public class AgentWorkspaceApplicationServiceImpl implements AgentWorkspaceApplicationService {
-
     @Resource
     private SkillFileClient skillFileClient;
     @Resource
     private SkillDomainService skillDomainService;
     @Resource
     private PublishApplicationService publishApplicationService;
+    @Resource
+    private IFileAccessService iFileAccessService;
 
     @Override
     public void createWorkspace(CreateWorkspaceDto createWorkspaceDto) {
@@ -53,6 +60,7 @@ public class AgentWorkspaceApplicationServiceImpl implements AgentWorkspaceAppli
         }
 
         List<SkillConfigDto> toPushSkills = new ArrayList<>();
+        List<String> skillUrls = new ArrayList<>();
         if (CollectionUtils.isNotEmpty(skillIds)) {
             List<SkillConfig> skillConfigs = skillDomainService.listByIds(skillIds);
             if (CollectionUtils.isNotEmpty(skillConfigs)) {
@@ -69,22 +77,19 @@ public class AgentWorkspaceApplicationServiceImpl implements AgentWorkspaceAppli
                         continue;
                     }
                     String config = publishedDto.getConfig();
-                    SkillConfigDto dto = JSON.parseObject(config, SkillConfigDto.class);
+                    SkillConfigDto dto = parseSkillConfig(config);
+                    SkillNameUtil.backfillName(dto, iFileAccessService);
+
+                    if (isV2Config(dto)) {
+                        if (StringUtils.isNotBlank(dto.getZipFileUrl())) {
+                            skillUrls.add(iFileAccessService.getFileUrlWithAk(dto.getZipFileUrl(), true));
+                        }
+                        continue;
+                    }
 
                     if (CollectionUtils.isEmpty(dto.getFiles())) {
                         log.warn("[createWorkspace] userId={} cId={} skillId={} 技能无文件，跳过", userId, cId, skillConfig.getId());
                         continue;
-                    }
-
-                    List<SkillFileDto> keyFiles = dto.getFiles().stream().filter(file -> "SKILL.MD".equalsIgnoreCase(file.getName()) && !Boolean.TRUE.equals(file.getIsDir())).toList();
-                    if (CollectionUtils.isNotEmpty(keyFiles)) {
-                        for (SkillFileDto file : keyFiles) {
-                            String name = MarkdownExtractUtil.extractFieldValue(file.getContents(), "name");
-                            if (StringUtils.isNotBlank(name)) {
-                                dto.setEnName(name);
-                                break;
-                            }
-                        }
                     }
 
                     log.info("[createWorkspace] userId={} cId={} skillId={}, skillName={} 技能打包开始", userId, cId, dto.getId(), dto.getName());
@@ -98,7 +103,21 @@ public class AgentWorkspaceApplicationServiceImpl implements AgentWorkspaceAppli
             zipFile = buildZip(toPushSkills, subagents);
         }
 
-        Map<String, Object> result = skillFileClient.createWorkSpace(userId, cId, zipFile);
+        Map<String, Object> result = null;
+        try {
+            result = skillFileClient.createWorkSpaceV2(userId, cId, zipFile, skillUrls);
+        } catch (Exception e) {
+            log.warn("[createWorkspace] userId={} cId={} 调用 createWorkSpaceV2 异常，准备回退到 createWorkSpace", userId, cId, e);
+        }
+
+        boolean v2Success = isSuccess(result);
+        if (!v2Success) {
+            String message = result == null ? "response is null" : String.valueOf(result.getOrDefault("message", "createWorkSpaceV2 failed"));
+            log.warn("[createWorkspace] userId={} cId={} createWorkSpaceV2失败，准备回退。message={}", userId, cId, message);
+
+            MultipartFile fallbackZipFile = buildZipWithSkillUrls(zipFile, skillUrls, false);
+            result = skillFileClient.createWorkSpace(userId, cId, fallbackZipFile);
+        }
 
         if (result == null) {
             throw BizException.of(ErrorCodeEnum.INVALID_PARAM, BizExceptionCodeEnum.agentWorkspaceCreateFailed);
@@ -117,23 +136,50 @@ public class AgentWorkspaceApplicationServiceImpl implements AgentWorkspaceAppli
     public void addSkillsToWorkspace(AddSkillsToWorkspaceDto addSkillsToWorkspaceDto) {
         Long userId = addSkillsToWorkspaceDto.getUserId();
         Long cId = addSkillsToWorkspaceDto.getCId();
-        MultipartFile zipFile = buildZip(addSkillsToWorkspaceDto.getSkillConfigs(), Collections.emptyList());
-        if (zipFile == null) {
-            throw BizException.of(ErrorCodeEnum.INVALID_PARAM, BizExceptionCodeEnum.agentSkillZipPackFailed);
+        List<SkillConfigDto> oldSkills = new ArrayList<>();
+        List<String> skillUrls = new ArrayList<>();
+        if (CollectionUtils.isNotEmpty(addSkillsToWorkspaceDto.getSkillConfigs())) {
+            for (SkillConfigDto skillConfig : addSkillsToWorkspaceDto.getSkillConfigs()) {
+                if (isV2Config(skillConfig)) {
+                    if (StringUtils.isNotBlank(skillConfig.getZipFileUrl())) {
+                        skillUrls.add(iFileAccessService.getFileUrlWithAk(skillConfig.getZipFileUrl(), true));
+                    }
+                } else {
+                    SkillNameUtil.backfillName(skillConfig, iFileAccessService);
+                    oldSkills.add(skillConfig);
+                }
+            }
         }
+        appendDynamicAddLockFiles(oldSkills);
+        MultipartFile baseZipFile = buildZip(oldSkills, Collections.emptyList());
 
-        Map<String, Object> result = skillFileClient.pushSkillsToWorkspace(userId, cId, zipFile);
+        Map<String, Object> result = null;
+        try {
+            result = skillFileClient.pushSkillsToWorkspaceV2(userId, cId, baseZipFile, skillUrls);
+        } catch (Exception e) {
+            log.warn("[addSkills] userId={} cId={} 调用 pushSkillsToWorkspaceV2 异常，准备回退到 pushSkillsToWorkspace", userId, cId, e);
+        }
+        // 回退老版本接口
+        if (!isSuccess(result)) {
+            String message = result == null ? "response is null" : String.valueOf(result.getOrDefault("message", "pushSkillsToWorkspaceV2 failed"));
+            log.warn("[addSkills] userId={} cId={} pushSkillsToWorkspaceV2失败，准备回退。message={}", userId, cId, message);
+
+            MultipartFile zipFile = buildZipWithSkillUrls(baseZipFile, skillUrls, true);
+            if (zipFile == null) {
+                throw BizException.of(ErrorCodeEnum.INVALID_PARAM, BizExceptionCodeEnum.agentSkillZipPackFailed);
+            }
+            result = skillFileClient.pushSkillsToWorkspace(userId, cId, zipFile);
+        }
 
         if (result == null) {
             log.error("[addSkills] userId={} cId={} 推送技能文件失败，响应为空", userId, cId);
             throw BizException.of(ErrorCodeEnum.INVALID_PARAM, BizExceptionCodeEnum.agentSkillFilePushFailed);
         }
-
         Object successObj = result.get("success");
         if (successObj instanceof Boolean && !(Boolean) successObj) {
             String message = result.getOrDefault("message", "推送技能文件失败").toString();
             log.error("[addSkills] userId={} cId={} 推送技能文件失败, message={}", userId, cId, message);
-            throw BizException.of(ErrorCodeEnum.INVALID_PARAM, BizExceptionCodeEnum.validationFailedWithDetail, message);
+            throw BizException.of(ErrorCodeEnum.INVALID_PARAM, BizExceptionCodeEnum.agentSkillFilePushFailed, message);
         }
 
         log.info("[addSkills] userId={} cId={} 动态增加技能完成", userId, cId);
@@ -150,6 +196,27 @@ public class AgentWorkspaceApplicationServiceImpl implements AgentWorkspaceAppli
         lockFile.setOperation("create");
         lockFile.setIsDir(false);
         return lockFile;
+    }
+
+    private void appendDynamicAddLockFiles(List<SkillConfigDto> skills) {
+        if (CollectionUtils.isEmpty(skills)) {
+            return;
+        }
+        for (SkillConfigDto skill : skills) {
+            if (skill == null || CollectionUtils.isEmpty(skill.getFiles())) {
+                continue;
+            }
+            boolean hasLockFile = false;
+            for (SkillFileDto file : skill.getFiles()) {
+                if (file != null && ".dynamic_add.lock".equals(file.getName())) {
+                    hasLockFile = true;
+                    break;
+                }
+            }
+            if (!hasLockFile) {
+                skill.getFiles().add(buildDynamicAddLockFile());
+            }
+        }
     }
 
     //
@@ -370,6 +437,220 @@ public class AgentWorkspaceApplicationServiceImpl implements AgentWorkspaceAppli
                 addedEntries.add(dirPath);
             }
         }
+    }
+
+    private boolean isSuccess(Map<String, Object> result) {
+        if (result == null) {
+            return false;
+        }
+        Object successObj = result.get("success");
+        return !(successObj instanceof Boolean) || (Boolean) successObj;
+    }
+
+    /**
+     * 回退到 create-workspace 时，将 skillUrls 对应的技能文件下载解压后合并到 zip 的 skills/ 目录下
+     */
+    private MultipartFile buildZipWithSkillUrls(MultipartFile originalZipFile, List<String> skillUrls, boolean appendDynamicLockFile) {
+        if (CollectionUtils.isEmpty(skillUrls)) {
+            return originalZipFile;
+        }
+
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream(); ZipOutputStream zos = new ZipOutputStream(baos, StandardCharsets.UTF_8)) {
+            Set<String> addedEntries = new HashSet<>();
+            addDirectoryEntry(zos, "skills/", addedEntries);
+            addDirectoryEntry(zos, "agents/", addedEntries);
+
+            if (originalZipFile != null) {
+                copyZipToOutput(originalZipFile.getBytes(), zos, addedEntries);
+            }
+
+            for (String skillUrl : skillUrls) {
+                if (StringUtils.isBlank(skillUrl)) {
+                    continue;
+                }
+                try (InputStream inputStream = new URL(skillUrl).openStream()) {
+                    byte[] zipBytes = inputStream.readAllBytes();
+                    copySkillZipToSkillsRoot(zipBytes, zos, addedEntries, appendDynamicLockFile);
+                } catch (Exception e) {
+                    log.error("[createWorkspace] 回退打包失败，下载或解压 skillUrl 异常, skillUrl={}", skillUrl, e);
+                    throw BizException.of(ErrorCodeEnum.INVALID_PARAM, BizExceptionCodeEnum.agentSkillZipPackFailed);
+                }
+            }
+
+            zos.finish();
+            byte[] zipBytes = baos.toByteArray();
+            if (zipBytes.length == 0) {
+                return null;
+            }
+            return new InMemoryMultipartFile("file", "skills.zip", "application/zip", zipBytes);
+        } catch (IOException e) {
+            log.error("[createWorkspace] 回退打包失败", e);
+            throw BizException.of(ErrorCodeEnum.INVALID_PARAM, BizExceptionCodeEnum.agentSkillZipPackFailed);
+        }
+    }
+
+    private void copyZipToOutput(byte[] sourceZipBytes, ZipOutputStream zos, Set<String> addedEntries) throws IOException {
+        try (ZipInputStream zis = new ZipInputStream(new java.io.ByteArrayInputStream(sourceZipBytes), StandardCharsets.UTF_8)) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                String entryName = normalizeZipPath(entry.getName());
+                if (StringUtils.isBlank(entryName)) {
+                    zis.closeEntry();
+                    continue;
+                }
+                if (entry.isDirectory()) {
+                    addDirectoryEntry(zos, entryName, addedEntries);
+                } else {
+                    byte[] data = zis.readAllBytes();
+                    addFileEntry(zos, entryName, data, addedEntries);
+                }
+                zis.closeEntry();
+            }
+        }
+    }
+
+    private void copySkillZipToSkillsRoot(byte[] sourceZipBytes, ZipOutputStream zos, Set<String> addedEntries, boolean appendDynamicLockFile) throws IOException {
+        Set<String> skillDirs = new HashSet<>();
+        try (ZipInputStream zis = new ZipInputStream(new java.io.ByteArrayInputStream(sourceZipBytes), StandardCharsets.UTF_8)) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                String rawName = normalizeZipPath(entry.getName());
+                if (StringUtils.isBlank(rawName)) {
+                    zis.closeEntry();
+                    continue;
+                }
+                String targetName = rawName.startsWith("skills/") ? rawName : "skills/" + rawName;
+                String skillDir = extractSkillDir(targetName);
+                if (StringUtils.isNotBlank(skillDir)) {
+                    skillDirs.add(skillDir);
+                }
+                if (entry.isDirectory()) {
+                    addDirectoryEntry(zos, targetName, addedEntries);
+                } else {
+                    byte[] data = zis.readAllBytes();
+                    addFileEntry(zos, targetName, data, addedEntries);
+                }
+                zis.closeEntry();
+            }
+        }
+        if (appendDynamicLockFile) {
+            byte[] lockFileBytes = "dynamic_add\n".getBytes(StandardCharsets.UTF_8);
+            for (String skillDir : skillDirs) {
+                addFileEntry(zos, skillDir + ".dynamic_add.lock", lockFileBytes, addedEntries);
+            }
+        }
+    }
+
+    private void addDirectoryEntry(ZipOutputStream zos, String dirName, Set<String> addedEntries) throws IOException {
+        String normalizedDir = normalizeDirectoryPath(dirName);
+        if (StringUtils.isBlank(normalizedDir) || addedEntries.contains(normalizedDir)) {
+            return;
+        }
+        ZipEntry entry = new ZipEntry(normalizedDir);
+        zos.putNextEntry(entry);
+        zos.closeEntry();
+        addedEntries.add(normalizedDir);
+    }
+
+    private void addFileEntry(ZipOutputStream zos, String entryName, byte[] data, Set<String> addedEntries) throws IOException {
+        String normalizedPath = normalizeZipPath(entryName);
+        if (StringUtils.isBlank(normalizedPath) || addedEntries.contains(normalizedPath)) {
+            return;
+        }
+        ensureParentDirectories(zos, normalizedPath, addedEntries);
+        ZipEntry entry = new ZipEntry(normalizedPath);
+        zos.putNextEntry(entry);
+        if (data != null && data.length > 0) {
+            zos.write(data);
+        }
+        zos.closeEntry();
+        addedEntries.add(normalizedPath);
+    }
+
+    private void ensureParentDirectories(ZipOutputStream zos, String filePath, Set<String> addedEntries) throws IOException {
+        String normalizedPath = normalizeZipPath(filePath);
+        if (StringUtils.isBlank(normalizedPath) || !normalizedPath.contains("/")) {
+            return;
+        }
+        int index = normalizedPath.lastIndexOf('/');
+        if (index <= 0) {
+            return;
+        }
+        String[] parts = normalizedPath.substring(0, index).split("/");
+        StringBuilder pathBuilder = new StringBuilder();
+        for (String part : parts) {
+            if (StringUtils.isBlank(part)) {
+                continue;
+            }
+            pathBuilder.append(part).append("/");
+            addDirectoryEntry(zos, pathBuilder.toString(), addedEntries);
+        }
+    }
+
+    private String normalizeZipPath(String entryName) {
+        if (entryName == null) {
+            return "";
+        }
+        String normalized = entryName.replace("\\", "/");
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        return normalized;
+    }
+
+    private String normalizeDirectoryPath(String dirName) {
+        String normalized = normalizeZipPath(dirName);
+        if (StringUtils.isBlank(normalized)) {
+            return normalized;
+        }
+        return normalized.endsWith("/") ? normalized : normalized + "/";
+    }
+
+    private String extractSkillDir(String targetName) {
+        String normalized = normalizeZipPath(targetName);
+        if (StringUtils.isBlank(normalized) || !normalized.startsWith("skills/")) {
+            return null;
+        }
+        String relative = normalized.substring("skills/".length());
+        if (StringUtils.isBlank(relative)) {
+            return null;
+        }
+        int index = relative.indexOf('/');
+        if (index < 0) {
+            return null;
+        }
+        String skillName = relative.substring(0, index);
+        if (StringUtils.isBlank(skillName)) {
+            return null;
+        }
+        return "skills/" + skillName + "/";
+    }
+
+    private SkillConfigDto parseSkillConfig(String config) {
+        if (StringUtils.isBlank(config)) {
+            return new SkillConfigDto();
+        }
+        try {
+            SkillPublishedConfigDto publishedConfig = JSON.parseObject(config, SkillPublishedConfigDto.class);
+            if (publishedConfig != null
+                    && (SkillFileFormatConstants.SKILL_FILES_V2.equals(publishedConfig.getFormat()) || StringUtils.isNotBlank(publishedConfig.getZipFileUrl()))) {
+                SkillConfigDto dto = new SkillConfigDto();
+                dto.setId(publishedConfig.getId());
+                dto.setName(publishedConfig.getName());
+                dto.setDescription(publishedConfig.getDescription());
+                dto.setIcon(publishedConfig.getIcon());
+                dto.setFiles(publishedConfig.getFiles());
+                dto.setZipFileUrl(publishedConfig.getZipFileUrl());
+                return dto;
+            }
+        } catch (Exception e) {
+            log.debug("parse skill config as v2 failed", e);
+        }
+        return JSON.parseObject(config, SkillConfigDto.class);
+    }
+
+    private boolean isV2Config(SkillConfigDto skillConfig) {
+        return skillConfig != null && StringUtils.isNotBlank(skillConfig.getZipFileUrl());
     }
 
 }

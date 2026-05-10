@@ -1,10 +1,10 @@
 package com.xspaceagi.system.web.controller;
 
+import com.xspaceagi.file.sdk.IFileAccessService;
 import com.xspaceagi.system.application.dto.TenantConfigDto;
 import com.xspaceagi.system.application.dto.UserDto;
 import com.xspaceagi.system.spec.common.RequestContext;
 import com.xspaceagi.system.spec.dto.ReqResult;
-import com.xspaceagi.system.spec.utils.FileAkUtil;
 import com.xspaceagi.system.spec.utils.I18nUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -24,13 +24,17 @@ public class TenantController {
     private String version;
 
     @Resource
-    private FileAkUtil fileAkUtil;
+    private IFileAccessService iFileAccessService;
 
     @Value("${supportCustomDomain:false}")
     private String supportCustomDomain;
 
     @Value("${spring.servlet.multipart.max-file-size:100MB}")
     private String maxFileSize;
+
+
+    @Value("${license:}")
+    private String license;
 
     @Operation(summary = "租户配置信息查询接口")
     @RequestMapping(path = "/config", method = RequestMethod.GET)
@@ -60,7 +64,9 @@ public class TenantController {
         tenantConfigDto.setVersion(version);
         tenantConfigDto.setSupportCustomDomain(StringUtils.equals(supportCustomDomain, "true"));
         tenantConfigDto.setEnabledSandbox(true);
-        tenantConfigDto.setSiteLogo(fileAkUtil.getFileUrlWithAk(tenantConfigDto.getSiteLogo()));
+        tenantConfigDto.setSiteLogo(iFileAccessService.getFileUrlWithAk(tenantConfigDto.getSiteLogo(), true));
+        tenantConfigDto.setFaviconUrl(iFileAccessService.getFileUrlWithAk(tenantConfigDto.getFaviconUrl(), true));
+        tenantConfigDto.setSquareBanner(iFileAccessService.getFileUrlWithAk(tenantConfigDto.getSquareBanner(), true));
         tenantConfigDto.setMaxFileSize(maxFileSize);
         if (StringUtils.isBlank(tenantConfigDto.getTemplateConfig()) || tenantConfigDto.getTemplateConfig().equals("{}")) {
             tenantConfigDto.setTemplateConfig("{\"primaryColor\":\"#5147ff\",\"backgroundId\":\"bg-variant-1\",\"antdTheme\":\"light\",\"layoutStyle\":\"light\",\"navigationStyle\":\"style1\",\"timestamp\":1757425328082}");
@@ -85,6 +91,9 @@ public class TenantController {
         }
         if (StringUtils.isBlank(tenantConfigDto.getLoginPageSubText())) {
             tenantConfigDto.setLoginPageSubText("Comprehensive workflow and plugin development, RAG knowledge base and data table storage, MCP integration and open capabilities");
+        }
+        if (StringUtils.isNotBlank(license)) {
+            tenantConfigDto.setCommercialEdition(true);
         }
         I18nUtil.replaceSystemMessage(tenantConfigDto);
         return ReqResult.success(tenantConfigDto);

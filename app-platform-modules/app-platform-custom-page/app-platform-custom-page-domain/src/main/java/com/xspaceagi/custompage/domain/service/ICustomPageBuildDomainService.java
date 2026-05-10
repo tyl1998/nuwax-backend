@@ -7,6 +7,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.xspaceagi.custompage.domain.model.CustomPageBuildModel;
+import com.xspaceagi.custompage.sdk.dto.TemplateTypeEnum;
 import com.xspaceagi.system.spec.common.UserContext;
 import com.xspaceagi.system.spec.dto.ReqResult;
 import com.xspaceagi.system.spec.page.SuperPage;
@@ -28,7 +29,7 @@ public interface ICustomPageBuildDomainService {
         /**
          * 初始化项目工程
          */
-        ReqResult<Map<String, Object>> initProject(Long projectId);
+        ReqResult<Map<String, Object>> initProject(Long projectId, TemplateTypeEnum templateType);
 
         /**
          * 上传项目

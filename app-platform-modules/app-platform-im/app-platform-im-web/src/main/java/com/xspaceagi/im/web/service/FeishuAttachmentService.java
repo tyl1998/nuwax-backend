@@ -26,7 +26,7 @@ import java.util.List;
 public class FeishuAttachmentService {
 
     @Resource
-    private FileUploadHelperService fileUploadHelperService;
+    private ImFileUploadHelper fileUploadHelperService;
 
     /**
      * 从飞书消息中下载附件并上传到项目存储。
@@ -41,7 +41,8 @@ public class FeishuAttachmentService {
      */
     public FeishuAttachmentResultDto downloadAndUpload(String appId, String appSecret, String messageId,
                                                        List<String> fileKeys, List<String> types,
-                                                       TenantConfigDto tenantConfig) {
+                                                       TenantConfigDto tenantConfig,
+                                                       Long uploadUserId) {
         FeishuAttachmentResultDto result = new FeishuAttachmentResultDto();
         if (fileKeys == null || fileKeys.isEmpty()) {
             return result;
@@ -76,12 +77,12 @@ public class FeishuAttachmentService {
 
                 // 2. 确定文件名和检测文件类型
                 String fileName = resp.getFileName();
-                FileUploadHelperService.UploadResult uploadResult;
+                ImFileUploadHelper.UploadResult uploadResult;
 
                 if (StringUtils.isNotBlank(fileName)) {
                     // 如果飞书返回了文件名，使用它
                     uploadResult = fileUploadHelperService.detectAndUploadByFileName(
-                        bytes, fileName, null, ImChannelEnum.FEISHU, tenantConfig);
+                        bytes, fileName, null, ImChannelEnum.FEISHU, tenantConfig, uploadUserId);
                 } else {
                     // 如果没有文件名，使用完整检测（不依赖文件名）
                     uploadResult = fileUploadHelperService.detectAndUpload(
@@ -92,7 +93,8 @@ public class FeishuAttachmentService {
                         type,                    // 原始类型（image/file）
                         fileKey,                 // 默认文件名
                         ImChannelEnum.FEISHU,     // IM 渠道类型
-                        tenantConfig
+                        tenantConfig,
+                        uploadUserId
                     );
                 }
 

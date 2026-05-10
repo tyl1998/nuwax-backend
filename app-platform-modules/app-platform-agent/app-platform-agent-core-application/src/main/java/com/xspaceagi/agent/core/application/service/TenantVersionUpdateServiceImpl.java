@@ -1,30 +1,28 @@
 package com.xspaceagi.agent.core.application.service;
 
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Consumer;
-
-import com.xspaceagi.system.application.service.I18nImportService;
-import com.xspaceagi.system.application.service.PermissionImportService;
-import com.xspaceagi.system.infra.dao.entity.Tenant;
-import com.xspaceagi.system.infra.dao.service.TenantService;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Service;
-
 import com.xspaceagi.agent.core.adapter.application.ModelApplicationService;
 import com.xspaceagi.agent.core.adapter.dto.config.ModelConfigDto;
 import com.xspaceagi.agent.core.adapter.repository.entity.ModelConfig;
 import com.xspaceagi.agent.core.spec.enums.ModelApiProtocolEnum;
 import com.xspaceagi.agent.core.spec.enums.ModelFunctionCallEnum;
 import com.xspaceagi.agent.core.spec.enums.ModelTypeEnum;
+import com.xspaceagi.system.application.service.I18nImportService;
+import com.xspaceagi.system.application.service.PermissionImportService;
+import com.xspaceagi.system.infra.dao.entity.Tenant;
+import com.xspaceagi.system.infra.dao.service.TenantService;
 import com.xspaceagi.system.spec.common.RequestContext;
 import com.xspaceagi.system.spec.enums.YesOrNoEnum;
-
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Consumer;
 
 @Slf4j
 @Service("TenantVersionUpdateService")
@@ -77,13 +75,6 @@ public class TenantVersionUpdateServiceImpl {
             log.info("Updated custom_page_config table, affected rows: {},", updatedRows);
         });
 
-//        tenantVersionUpgradeMap.put("1.0.5", (tenant) -> {
-//            // Let all document segments re-perform full-text search, sync to ES once, ensuring no data is missed
-//            String updateSql = "update knowledge_raw_segment set fulltext_sync_status=0;";
-//            int updatedRows = jdbcTemplate.update(updateSql);
-//            log.info("Updated knowledge_raw_segment table, affected rows: {},", updatedRows);
-//        });
-
         tenantVersionUpgradeMap.put("1.0.6.1", (tenant) -> {
             log.info("Initialize menu permissions, tenant ID: {}", tenant.getId());
             // If permission-related tables are not yet created when executing this method, an exception will be thrown. The upgrade control will wait and retry, no special handling needed here
@@ -99,9 +90,10 @@ public class TenantVersionUpdateServiceImpl {
             permissionImportService.importDiffToTenant(tenant, "1.2");
         });
 
-        tenantVersionUpgradeMap.put("1.0.7.9", (tenant) -> {
+        tenantVersionUpgradeMap.put("1.0.8.1", (tenant) -> {
             i18nImportService.importLangToTenant(tenant, "1.0");
             i18nImportService.importConfigToTenant(tenant, "1.0");
+            i18nImportService.overwriteDiffConfigToTenant(tenant, "1.0");
         });
 
         new Thread(() -> {
