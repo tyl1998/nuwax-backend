@@ -1,0 +1,26 @@
+services:
+  nuwax-backend:
+    build:
+      context: ..
+      dockerfile: Dockerfile.runtime
+    image: nuwax-backend:local
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+      - "6443:6443"
+    volumes:
+      - nuwax-backend-upload:/app/upload
+      - nuwax-backend-logs:/app/logs
+      - ../docker/jwt:/app/config/jwt
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/ready || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+volumes:
+  nuwax-backend-upload:
+  nuwax-backend-logs:

@@ -1,0 +1,137 @@
+spring:
+  main:
+    allow-circular-references: true
+  mvc:
+    pathmatch:
+      matching-strategy: ANT_PATH_MATCHER
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+  datasource:
+    sql-generator:
+      type: mysql
+    dynamic:
+      primary: master
+      strict: false
+      p6spy: false
+      seata: false
+      datasource:
+        master:
+          url: jdbc:mysql://${DB_HOST:${MYSQL_HOST:mysql}}:${DB_PORT:${MYSQL_PORT:3306}}/${DB_NAME:${MYSQL_DATABASE:agent_platform}}?serverTimezone=Asia/Shanghai&characterEncoding=utf-8&allowMultiQueries=true&socketTimeout=300000&useSSL=false
+          driver-class-name: com.mysql.cj.jdbc.Driver
+          username: ${DB_USERNAME:${MYSQL_USER:agent_platform}}
+          password: ${DB_PASSWORD:${MYSQL_PASSWORD:admin123}}
+        doris:
+          url: jdbc:mysql://${DORIS_HOST:${DB_HOST:${MYSQL_HOST:mysql}}}:${DORIS_PORT:${DB_PORT:${MYSQL_PORT:3306}}}/${DORIS_DB_NAME:${DORIS_DB:agent_custom_table}}?serverTimezone=Asia/Shanghai&characterEncoding=utf-8&allowMultiQueries=true&socketTimeout=300000&useSSL=false
+          driver-class-name: com.mysql.cj.jdbc.Driver
+          username: ${DORIS_USERNAME:${DB_USERNAME:${MYSQL_USER:agent_platform}}}
+          password: ${DORIS_PASSWORD:${DB_PASSWORD:${MYSQL_PASSWORD:admin123}}}
+          table:
+            replication-num: 1
+            bucket-num: 10
+            duplicate-key: id
+            distributed-key: id
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:123456}
+      database: ${REDIS_DB:0}
+
+milvus:
+  uri: ${MILVUS_URI:http://milvus:${MILVUS_PORT:19530}}
+  user: ${MILVUS_USER:root}
+  password: ${MILVUS_PASSWORD:Milvus}
+
+code:
+  execute:
+    url: ${CODE_EXECUTE_URL:http://mcp-proxy:8089/api/run_code_with_log}
+
+jwt:
+  secretKey: ${JWT_SECRET_KEY}
+
+file:
+  uploadFolder: ${FILE_UPLOAD_FOLDER:/app/upload}
+
+storage:
+  type: ${STORAGE_TYPE:file}
+
+cos:
+  secret-id: ${COS_SECRET_ID:}
+  secret-key: ${COS_SECRET_KEY:}
+  region: ${COS_REGION:ap-chengdu}
+  bucket-name: ${COS_BUCKET_NAME:}
+  endpoint: ${COS_ENDPOINT:}
+  secretId: ${COS_SECRET_ID:}
+  secretKey: ${COS_SECRET_KEY:}
+  baseUrl: ${COS_BASE_URL:}
+
+log-module:
+  log:
+    rust-service:
+      base-url: ${LOG_SERVICE_URL:http://log_platform:8097}
+      connect-timeout-seconds: 10
+      write-timeout-seconds: 30
+      read-timeout-seconds: 30
+      enable-connection-pool: true
+      max-idle-connections: 5
+      keep-alive-duration-minutes: 5
+
+search:
+  elasticsearch:
+    url: ${ES_URL:http://elasticsearch:9200}
+    username: ${ES_USERNAME:elastic}
+    password: ${ES_PASSWORD:${ELASTICSEARCH_PASSWORD:elastic123}}
+    api_key: ${ES_API_KEY:}
+
+logging:
+  file:
+    path: /app/logs
+  config: classpath:logback-custom.xml
+
+eco-market:
+  server:
+    base-url: ${ECO_MARKET_SERVER_URL:https://agent-market-api.xspaceagi.com}
+  client:
+    retry:
+      interval: 300
+
+mcp:
+  proxy-base-url: ${MCP_PROXY_URL:http://mcp-proxy:8089}
+
+installation-source: ${INSTALLATION_SOURCE:nuwax-cli}
+
+knife4j:
+  enable: true
+  production: ${KNIFE4J_PRODUCTION:true}
+
+custom-page:
+  http-proxy:
+    host: ${CUSTOM_PAGE_PROXY_HOST:0.0.0.0}
+    port: ${CUSTOM_PAGE_PROXY_PORT:18082}
+  dev-server-host: ${DEV_SERVER_HOST:http://rcoder}
+  prod-server-host: ${PROD_SERVER_HOST:http://rcoder}
+  build-server:
+    base-url: ${BUILD_SERVER_URL:http://rcoder:60000/api}
+  ai-agent:
+    base-url: ${AI_AGENT_URL:http://rcoder:8086}
+  docker-proxy:
+    enable: ${DOCKER_PROXY_ENABLE:true}
+    base-url: ${DOCKER_PROXY_URL:http://rcoder:8088}
+
+computer:
+  proxy:
+    host: ${COMPUTER_PROXY_HOST:0.0.0.0}
+    port: ${COMPUTER_PROXY_PORT:18085}
+
+supportCustomDomain: ${SUPPORT_CUSTOM_DOMAIN:false}
+
+reverse:
+  server:
+    outer:
+      host: ${OUTER_HOST:}
+      port: ${OUTER_PORT:6443}
+
+model-api-proxy:
+  enable-model-proxy: ${MODEL_PROXY_ENABLE:false}

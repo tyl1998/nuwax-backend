@@ -46,8 +46,11 @@ public class WebMvcConfig implements WebMvcConfigurer {
     @Resource
     private ApiKeyInterceptor apiKeyInterceptor;
 
-    @Value("${access.control.allow-origin}")
+    @Value("${access.control.allow-origin:*}")
     private String accessControlAllowOrigin;
+
+    @Value("${access.control.allow-credentials:false}")
+    private Boolean accessControlAllowCredentials;
 
     @Override
     public void addInterceptors(InterceptorRegistry interceptorRegistry) {
@@ -60,13 +63,17 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
-        registry.addMapping("/**") // 允许所有请求路径跨域访问
-                .allowCredentials(true) // 是否携带Cookie，默认false
+        String[] allowedOriginPatterns = Arrays.stream(accessControlAllowOrigin.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .toArray(String[]::new);
+        registry.addMapping("/**")
+                .allowCredentials(accessControlAllowCredentials)
                 .allowedHeaders("Origin", "X-Requested-With", "Content-Type", "Accept", "Authorization",
-                        "Cache-Control", "Fragment") // 允许的请求头类型
-                .maxAge(3600) // 预检请求的缓存时间（单位：秒）
-                .allowedMethods("HEAD", "GET", "POST", "PUT", "DELETE", "OPTIONS") // 允许的请求方法类型
-                .allowedOriginPatterns(accessControlAllowOrigin); // 允许哪些域名进行跨域访问
+                        "Cache-Control", "Fragment")
+                .maxAge(3600)
+                .allowedMethods("HEAD", "GET", "POST", "PUT", "DELETE", "OPTIONS")
+                .allowedOriginPatterns(allowedOriginPatterns.length == 0 ? new String[]{"*"} : allowedOriginPatterns);
     }
 
     @Bean

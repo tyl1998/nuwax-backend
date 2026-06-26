@@ -1,0 +1,10 @@
+FROM eclipse-temurin:17-jre-jammy
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends bash curl netcat-openbsd ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY app-platform-bootstrap/app-platform-web-bootstrap/target/app-platform-web-bootstrap-*.jar /app/app.jar
+COPY docker/entrypoint.sh /app/entrypoint.sh
+COPY docker/application-external.yml /app/config/application-external.yml
+COPY sql /app/sql
+RUN chmod +x /app/entrypoint.sh && mkdir -p /app/upload /app/logs /app/config
+EXPOSE 8081 6443
+ENTRYPOINT ["/app/entrypoint.sh"]

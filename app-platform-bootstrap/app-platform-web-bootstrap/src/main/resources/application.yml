@@ -37,7 +37,8 @@ logging:
 #允许跨域的根域名
 access:
   control:
-    allow-origin: "*"
+    allow-origin: ${CORS_ALLOW_ORIGIN:*}
+    allow-credentials: ${CORS_ALLOW_CREDENTIALS:false}
 
 #无需检测登录的接口，前缀匹配
 auth:

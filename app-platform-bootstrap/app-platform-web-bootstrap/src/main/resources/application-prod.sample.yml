@@ -27,7 +27,7 @@ spring:
       datasource:
         # 主数据源 (MySQL)
         master:
-          url: jdbc:mysql://${DB_HOST:localhost}:3306/${DB_NAME:agent_platform}?serverTimezone=Asia/Shanghai&characterEncoding=utf-8&allowMultiQueries=true&socketTimeout=300000&useSSL=false
+          url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:agent_platform}?serverTimezone=Asia/Shanghai&characterEncoding=utf-8&allowMultiQueries=true&socketTimeout=300000&useSSL=false
           driver-class-name: com.mysql.cj.jdbc.Driver
           username: ${DB_USERNAME:root}
           password: ${DB_PASSWORD:your_mysql_password}
@@ -48,7 +48,7 @@ spring:
             filters: stat # 启用 stat filter 用于监控
         # Doris 数据源
         doris:
-          url: jdbc:mysql://${DORIS_HOST:localhost}:3306/${DORIS_DB_NAME:agent_custom_table}?serverTimezone=Asia/Shanghai&characterEncoding=utf-8&allowMultiQueries=true&socketTimeout=300000&useSSL=false
+          url: jdbc:mysql://${DORIS_HOST:localhost}:${DORIS_PORT:3306}/${DORIS_DB_NAME:agent_custom_table}?serverTimezone=Asia/Shanghai&characterEncoding=utf-8&allowMultiQueries=true&socketTimeout=300000&useSSL=false
           driver-class-name: com.mysql.cj.jdbc.Driver
           username: ${DORIS_USERNAME:root}
           password: ${DORIS_PASSWORD:your_doris_password}

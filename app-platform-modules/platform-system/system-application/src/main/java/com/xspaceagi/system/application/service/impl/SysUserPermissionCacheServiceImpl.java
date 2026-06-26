@@ -366,15 +366,31 @@ public class SysUserPermissionCacheServiceImpl implements SysUserPermissionCache
                 ? new ArrayList<>()
                 : sysResourceApplicationService.getResourceByIds(authorizedIds.getResourceIds());
 
-        if (CollectionUtils.isEmpty(originMenus)) {
+        // 过滤掉 status=0（禁用）的菜单
+        List<SysMenu> enabledMenus = originMenus.stream()
+                .filter(m -> m.getStatus() != null && m.getStatus() == 1)
+                .collect(Collectors.toList());
+
+        if (CollectionUtils.isEmpty(enabledMenus)) {
             return new ArrayList<>();
+        }
+
+        // 收集被禁用的菜单ID，用于过滤 authorizedMenuNodes 中的子菜单
+        Set<Long> disabledMenuIds = originMenus.stream()
+                .filter(m -> m.getStatus() == null || m.getStatus() != 1)
+                .map(SysMenu::getId)
+                .collect(Collectors.toSet());
+
+        // 从 authorizedMenuNodes 中移除被禁用菜单的节点
+        if (CollectionUtils.isNotEmpty(disabledMenuIds)) {
+            authorizedMenuNodes.removeIf(n -> n.getId() != null && disabledMenuIds.contains(n.getId()));
         }
 
         Map<Long, MenuNode> authorizedMenuNodeMap = authorizedMenuNodes.stream()
                 .filter(n -> n.getId() != null)
                 .collect(Collectors.toMap(MenuNode::getId, n -> n, (a, b) -> a));
 
-        List<MenuNodeDto> menuDtos = originMenus.stream()
+        List<MenuNodeDto> menuDtos = enabledMenus.stream()
                 .map(originMenu -> {
                     MenuNodeDto dto = new MenuNodeDto();
                     BeanUtils.copyProperties(originMenu, dto);

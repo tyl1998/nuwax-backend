@@ -31,12 +31,14 @@ public class RedissonConfig {
         Config config = new Config();
         String address = String.format("redis://%s:%s", redisProperties.getHost(), redisProperties.getPort());
         
-        config.useSingleServer()
+        var singleServerConfig = config.useSingleServer()
             .setAddress(address)
             .setDatabase(redisProperties.getDatabase())
-            .setPassword(redisProperties.getPassword())
             .setConnectTimeout(getTimeout(redisProperties.getConnectTimeout(), DEFAULT_CONNECT_TIMEOUT))
             .setTimeout(getTimeout(redisProperties.getTimeout(), DEFAULT_TIMEOUT));
+        if (redisProperties.getPassword() != null && !redisProperties.getPassword().isBlank()) {
+            singleServerConfig.setPassword(redisProperties.getPassword());
+        }
             
         return Redisson.create(config);
     }
