@@ -40,6 +40,7 @@ docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
 
 docker run -d \
   --name "$CONTAINER_NAME" \
+  --add-host=host.docker.internal:host-gateway \
   ${NETWORK_ARGS[@]+"${NETWORK_ARGS[@]}"} \
   -p "$HOST_APP_PORT:$APP_PORT" \
   -p "$HOST_OUTER_PORT:$OUTER_PORT" \
