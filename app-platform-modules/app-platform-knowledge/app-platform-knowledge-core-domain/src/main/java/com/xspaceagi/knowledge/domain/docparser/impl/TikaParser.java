@@ -35,6 +35,8 @@ import org.apache.tika.sax.BodyContentHandler;
 import org.springframework.stereotype.Service;
 import org.xml.sax.SAXException;
 
+import com.xspaceagi.system.spec.utils.FileUrlResolver;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -104,7 +106,7 @@ public class TikaParser implements DocParser {
             }
 
             // 下载文件
-            URL url = new URL(docUrl);
+            URL url = new URL(FileUrlResolver.toAbsoluteUrl(docUrl));
             URLConnection connection = url.openConnection();
             try (InputStream stream = connection.getInputStream()) {
                 // 使用 Apache Tika 解析文件内容
@@ -159,7 +161,7 @@ public class TikaParser implements DocParser {
             }
 
             // 2. 通过HTTP响应头Content-Type判断（不下载文件内容）
-            URL url = new URL(docUrl);
+            URL url = new URL(FileUrlResolver.toAbsoluteUrl(docUrl));
             URLConnection connection = url.openConnection();
             connection.setConnectTimeout(5000); // 5秒超时
             connection.setReadTimeout(5000);
