@@ -1,18 +1,27 @@
 package com.xspaceagi.system.spec.utils;
 
+import java.net.URI;
+
 public class FileUrlResolver {
 
-    private static final String LOCAL_BASE;
+    private static final int PORT;
 
     static {
-        String port = System.getProperty("server.port", System.getenv().getOrDefault("APP_PORT", "8080"));
-        LOCAL_BASE = "http://localhost:" + port;
+        String portStr = System.getProperty("server.port", System.getenv().getOrDefault("APP_PORT", "8080"));
+        PORT = Integer.parseInt(portStr);
     }
 
     public static String toAbsoluteUrl(String url) {
-        if (url != null && url.startsWith("/")) {
-            return LOCAL_BASE + url;
+        if (url == null) return url;
+        if (url.startsWith("/")) {
+            return "http://localhost:" + PORT + url;
         }
-        return url;
+        try {
+            URI uri = new URI(url);
+            URI localUri = new URI("http", null, "localhost", PORT, uri.getPath(), uri.getQuery(), null);
+            return localUri.toString();
+        } catch (Exception e) {
+            return url;
+        }
     }
 }
