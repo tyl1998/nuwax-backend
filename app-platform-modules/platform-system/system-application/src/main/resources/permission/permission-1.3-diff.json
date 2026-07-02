@@ -203,18 +203,7 @@
         "sortIndex": 1,
         "status": 1
       },
-      {
-        "parentCode": "component_lib_dev",
-        "code": "plugin_and_workflow",
-        "name": "插件与工作流",
-        "description": "插件与工作流",
-        "source": 1,
-        "path": "/space/:spaceId/plugin-workflow",
-        "openType": 1,
-        "icon": "",
-        "sortIndex": 1,
-        "status": 1
-      },
+
       {
         "parentCode": "subscription_and_points",
         "code": "points_config",
@@ -227,18 +216,7 @@
         "sortIndex": 1,
         "status": 1
       },
-      {
-        "parentCode": "component_lib_dev",
-        "code": "knowledge_and_datatable",
-        "name": "知识与数据存储",
-        "description": "知识与数据存储",
-        "source": 1,
-        "path": "/space/:spaceId/knowledge-storage",
-        "openType": 1,
-        "icon": "",
-        "sortIndex": 2,
-        "status": 1
-      },
+
       {
         "parentCode": "pay_and_earnings",
         "code": "merchant_onboarding",
@@ -760,18 +738,7 @@
   },
   "roleMenus": {
     "added": [
-      {
-        "roleCode": "super_admin",
-        "menuCode": "plugin_and_workflow",
-        "menuBindType": 1,
-        "resourceTree": []
-      },
-      {
-        "roleCode": "super_admin",
-        "menuCode": "knowledge_and_datatable",
-        "menuBindType": 1,
-        "resourceTree": []
-      },
+
       {
         "roleCode": "super_admin",
         "menuCode": "space_model_manage",

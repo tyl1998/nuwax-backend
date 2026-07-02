@@ -79,18 +79,7 @@
   },
   "groupMenus": {
     "added": [
-      {
-        "groupCode": "default_group",
-        "menuCode": "plugin_and_workflow",
-        "menuBindType": 1,
-        "resourceTree": []
-      },
-      {
-        "groupCode": "default_group",
-        "menuCode": "knowledge_and_datatable",
-        "menuBindType": 1,
-        "resourceTree": []
-      },
+
       {
         "groupCode": "default_group",
         "menuCode": "space_model_manage",
