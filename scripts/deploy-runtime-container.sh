@@ -82,7 +82,7 @@ docker run -d \
   -e DOCKER_PROXY_URL="${DOCKER_PROXY_URL:-http://host.docker.internal:8088}" \
   -e DEV_SERVER_HOST="${DEV_SERVER_HOST:-http://host.docker.internal}" \
   -e PROD_SERVER_HOST="${PROD_SERVER_HOST:-http://host.docker.internal:8099}" \
-  -e CORS_ALLOW_ORIGIN="${CORS_ALLOW_ORIGIN:-http://localhost,http://localhost:80,http://localhost:8080}" \
+  -e CORS_ALLOW_ORIGIN="${CORS_ALLOW_ORIGIN:-http://10.94.77.42:18080,http://localhost,http://localhost:80,http://localhost:8080}" \
   -e CORS_ALLOW_CREDENTIALS="${CORS_ALLOW_CREDENTIALS:-true}" \
   -e OUTER_PORT="$OUTER_PORT" \
   -e COMPUTER_PROXY_PORT="$COMPUTER_PROXY_PORT" \
