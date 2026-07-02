@@ -4,9 +4,7 @@ import com.xspaceagi.file.application.service.FileManagementService;
 import com.xspaceagi.file.domain.model.FileRecordDomain;
 import com.xspaceagi.file.domain.repository.FileRecordRepository;
 import com.xspaceagi.file.domain.storage.FileStorageStrategy;
-import com.xspaceagi.system.application.dto.TenantConfigDto;
 import com.xspaceagi.system.application.service.TenantConfigApplicationService;
-import com.xspaceagi.system.spec.common.RequestContext;
 import com.xspaceagi.system.spec.tenant.thread.TenantFunctions;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -60,18 +58,7 @@ public class FileManagementServiceImpl implements FileManagementService {
             throw new RuntimeException(e);
         }
 
-        // Get fileBaseUrl from tenant config (async IM callbacks may have no RequestContext)
-        RequestContext<?> requestContext = RequestContext.get();
-        TenantConfigDto tenantConfigDto = requestContext != null
-                ? (TenantConfigDto) requestContext.getTenantConfig()
-                : null;
-        if (tenantConfigDto == null && tenantId != null) {
-            tenantConfigDto = tenantConfigApplicationService.getTenantConfig(tenantId);
-        }
-        String fileBaseUrl = tenantConfigDto != null ? tenantConfigDto.getSiteUrl() : "http://localhost:8081";
-
-        // Generate fileUrl: fileBaseUrl/api/f/fileKey
-        String fileUrl = fileBaseUrl + "/api/f/" + fileKey;
+        String fileUrl = "/api/f/" + fileKey;
 
         // Get file extension
         String fileName = file.getOriginalFilename();

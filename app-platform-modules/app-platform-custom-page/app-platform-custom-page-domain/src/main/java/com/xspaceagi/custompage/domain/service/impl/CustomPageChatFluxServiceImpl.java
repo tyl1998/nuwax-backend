@@ -71,6 +71,8 @@ import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
 
+import com.xspaceagi.system.spec.utils.FileUrlResolver;
+
 import java.io.*;
 import java.net.URL;
 import java.net.URLConnection;
@@ -1566,7 +1568,7 @@ public class CustomPageChatFluxServiceImpl implements ICustomPageChatFluxService
             return DataTypeEnum.File_Image;
         } else {
             try {
-                URL fileUrl = new URL(url0);
+                URL fileUrl = new URL(FileUrlResolver.toAbsoluteUrl(url0));
                 URLConnection connection = fileUrl.openConnection();
                 connection.setRequestProperty("User-Agent", "Mozilla/5.0");
                 connection.connect();

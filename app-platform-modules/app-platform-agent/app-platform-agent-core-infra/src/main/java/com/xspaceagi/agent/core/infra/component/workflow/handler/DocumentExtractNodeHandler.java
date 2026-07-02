@@ -6,6 +6,7 @@ import com.xspaceagi.agent.core.adapter.dto.config.workflow.WorkflowNodeDto;
 import com.xspaceagi.agent.core.infra.component.workflow.WorkflowContext;
 import com.xspaceagi.agent.core.spec.enums.DataTypeEnum;
 import com.xspaceagi.agent.core.spec.utils.UrlFile;
+import com.xspaceagi.system.spec.utils.FileUrlResolver;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
@@ -97,7 +98,7 @@ public class DocumentExtractNodeHandler extends AbstractNodeHandler {
             return DataTypeEnum.File_Txt;
         } else {
             try {
-                URL fileUrl = new URL(url0);
+                URL fileUrl = new URL(FileUrlResolver.toAbsoluteUrl(url0));
                 URLConnection connection = fileUrl.openConnection();
                 connection.setRequestProperty("User-Agent", "Mozilla/5.0");
                 connection.connect();

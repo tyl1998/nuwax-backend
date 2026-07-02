@@ -17,6 +17,7 @@ import com.xspaceagi.system.spec.enums.ErrorCodeEnum;
 import com.xspaceagi.system.spec.exception.BizException;
 import com.xspaceagi.system.spec.exception.BizExceptionCodeEnum;
 import com.xspaceagi.system.spec.file.InMemoryMultipartFile;
+import com.xspaceagi.system.spec.utils.FileUrlResolver;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
@@ -468,7 +469,7 @@ public class AgentWorkspaceApplicationServiceImpl implements AgentWorkspaceAppli
                 if (StringUtils.isBlank(skillUrl)) {
                     continue;
                 }
-                try (InputStream inputStream = new URL(skillUrl).openStream()) {
+                try (InputStream inputStream = new URL(FileUrlResolver.toAbsoluteUrl(skillUrl)).openStream()) {
                     byte[] zipBytes = inputStream.readAllBytes();
                     copySkillZipToSkillsRoot(zipBytes, zos, addedEntries, appendDynamicLockFile);
                 } catch (Exception e) {
