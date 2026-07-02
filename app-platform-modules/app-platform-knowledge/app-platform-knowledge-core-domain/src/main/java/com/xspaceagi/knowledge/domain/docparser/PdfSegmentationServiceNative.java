@@ -1,7 +1,6 @@
 package com.xspaceagi.knowledge.domain.docparser;
 
 import lombok.extern.slf4j.Slf4j;
-import com.xspaceagi.system.spec.utils.FileUrlResolver;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -64,7 +63,7 @@ public class PdfSegmentationServiceNative {
     public List<String> parseFromUrl(String pdfUrl) throws Exception {
         log.info("Download PDF: {}", pdfUrl);
         Path tempFile = Files.createTempFile("pdf_", ".pdf");
-        try (InputStream in = new URL(FileUrlResolver.toAbsoluteUrl(pdfUrl)).openStream()) {
+        try (InputStream in = new URL(pdfUrl).openStream()) {
             Files.copy(in, tempFile, StandardCopyOption.REPLACE_EXISTING);
             return parsePdf(tempFile.toFile());
         } finally {

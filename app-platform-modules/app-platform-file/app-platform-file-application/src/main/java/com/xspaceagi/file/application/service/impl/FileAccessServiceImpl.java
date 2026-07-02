@@ -151,9 +151,6 @@ public class FileAccessServiceImpl implements IFileAccessService {
     }
 
     private static String getUrlPath(String fileUrl) throws MalformedURLException {
-        if (fileUrl != null && fileUrl.startsWith("/")) {
-            return fileUrl;
-        }
         URL url;
         url = new URL(fileUrl);
         return url.getPath();

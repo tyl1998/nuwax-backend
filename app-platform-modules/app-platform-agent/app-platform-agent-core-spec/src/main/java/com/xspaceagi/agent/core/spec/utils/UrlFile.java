@@ -2,7 +2,6 @@ package com.xspaceagi.agent.core.spec.utils;
 
 import com.alibaba.fastjson2.JSONObject;
 import com.xspaceagi.file.sdk.IFileAccessService;
-import com.xspaceagi.system.spec.utils.FileUrlResolver;
 import com.xspaceagi.system.spec.utils.HttpClient;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.xwpf.usermodel.*;
@@ -46,7 +45,7 @@ public class UrlFile {
     public static String parseToString(String url) {
         try {
             url = iFileAccessService.getFileUrlWithAk(url, true);
-            return tika.parseToString(new URL(FileUrlResolver.toAbsoluteUrl(url)));
+            return tika.parseToString(new URL(url));
         } catch (IOException e) {
             throw new RuntimeException(e);
         } catch (TikaException e) {
@@ -168,7 +167,6 @@ public class UrlFile {
 
     public static byte[] downLoad(String url) {
         url = iFileAccessService.getFileUrlWithAk(url, true);
-        url = FileUrlResolver.toAbsoluteUrl(url);
         try {
             return httpClient.download(url);
         } catch (Exception e) {
@@ -199,7 +197,6 @@ public class UrlFile {
     }
 
     private static InputStream getConnectionStream(String httpUrl) throws Exception {
-        httpUrl = FileUrlResolver.toAbsoluteUrl(httpUrl);
         URI uri = new URI(httpUrl);
         URL url = uri.toURL();
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
