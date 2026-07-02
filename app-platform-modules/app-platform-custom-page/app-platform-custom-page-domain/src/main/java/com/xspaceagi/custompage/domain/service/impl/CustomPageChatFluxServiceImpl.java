@@ -1499,7 +1499,7 @@ public class CustomPageChatFluxServiceImpl implements ICustomPageChatFluxService
         log.info("[Flux Service] project Id={} startdownload URL file, url={}, file Name={}", projectId, url, fileName);
         File tempFile = File.createTempFile("upload_", "_" + fileName);
         String fileUrlWithAk = iFileAccessService.getFileUrlWithAk(url, true);
-        URL fileUrl = new URL(fileUrlWithAk);
+        URL fileUrl = new URL(FileUrlResolver.toAbsoluteUrl(fileUrlWithAk));
         try (InputStream in = fileUrl.openStream();
              OutputStream out = new FileOutputStream(tempFile)) {
             byte[] buffer = new byte[8192];

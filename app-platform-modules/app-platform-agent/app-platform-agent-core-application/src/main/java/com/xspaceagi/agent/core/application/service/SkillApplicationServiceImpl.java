@@ -32,6 +32,7 @@ import com.xspaceagi.system.spec.enums.YnEnum;
 import com.xspaceagi.system.spec.exception.BizException;
 import com.xspaceagi.system.spec.exception.BizExceptionCodeEnum;
 import com.xspaceagi.system.spec.file.InMemoryMultipartFile;
+import com.xspaceagi.system.spec.utils.FileUrlResolver;
 import com.xspaceagi.system.spec.jackson.JsonSerializeUtil;
 import com.xspaceagi.system.spec.utils.I18nUtil;
 import com.xspaceagi.file.application.service.FileManagementService;
@@ -924,7 +925,7 @@ public class SkillApplicationServiceImpl implements SkillApplicationService {
                 log.warn("download file by key failed, key={}", fileKey, e);
             }
         }
-        try (InputStream inputStream = new URI(fileProxyUrl).toURL().openStream()) {
+        try (InputStream inputStream = new URI(FileUrlResolver.toAbsoluteUrl(fileProxyUrl)).toURL().openStream()) {
             return readAllBytes(inputStream);
         } catch (Exception e) {
             log.warn("download file by url failed, url={}", fileProxyUrl, e);

@@ -4,6 +4,7 @@ import com.xspaceagi.agent.core.adapter.dto.SkillConfigDto;
 import com.xspaceagi.agent.core.adapter.dto.SkillFileDto;
 import com.xspaceagi.agent.core.spec.utils.MarkdownExtractUtil;
 import com.xspaceagi.file.sdk.IFileAccessService;
+import com.xspaceagi.system.spec.utils.FileUrlResolver;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -64,7 +65,7 @@ public final class SkillNameUtil {
     private static String downloadSkillFileContent(String fileProxyUrl, IFileAccessService iFileAccessService) {
         try {
             String fileUrlWithAk = iFileAccessService.getFileUrlWithAk(fileProxyUrl, true);
-            URL fileUrl = new URL(fileUrlWithAk);
+            URL fileUrl = new URL(FileUrlResolver.toAbsoluteUrl(fileUrlWithAk));
             try (InputStream in = fileUrl.openStream(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
                 byte[] buffer = new byte[8192];
                 int bytesRead;

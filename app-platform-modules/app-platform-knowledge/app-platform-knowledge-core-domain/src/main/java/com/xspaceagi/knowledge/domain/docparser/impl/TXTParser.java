@@ -8,6 +8,7 @@ import com.xspaceagi.knowledge.domain.model.KnowledgeDocumentModel;
 import com.xspaceagi.system.spec.common.UserContext;
 import com.xspaceagi.system.spec.exception.BizExceptionCodeEnum;
 import com.xspaceagi.system.spec.exception.KnowledgeException;
+import com.xspaceagi.system.spec.utils.FileUrlResolver;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -38,7 +39,7 @@ public class TXTParser implements DocParser {
             case URL_FILE -> {
                 StringBuilder content = new StringBuilder();
                 try (BufferedReader reader =
-                             new BufferedReader(new InputStreamReader(new URL(documentDto.getDocUrl()).openStream()))) {
+                             new BufferedReader(new InputStreamReader(new URL(FileUrlResolver.toAbsoluteUrl(documentDto.getDocUrl())).openStream()))) {
                     content.append(reader.lines()
                             .toList());
 

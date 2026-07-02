@@ -13,6 +13,7 @@ import com.xspaceagi.knowledge.domain.model.KnowledgeDocumentModel;
 import com.xspaceagi.system.spec.common.UserContext;
 import com.xspaceagi.system.spec.exception.BizExceptionCodeEnum;
 import com.xspaceagi.system.spec.exception.KnowledgeException;
+import com.xspaceagi.system.spec.utils.FileUrlResolver;
 
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -27,7 +28,7 @@ public class WordParser implements DocParser {
     @Override
     public void chunk(KnowledgeDocumentModel documentDto, UserContext userContext) {
 
-        try (XWPFDocument document = new XWPFDocument(new URL(documentDto.getDocUrl()).openStream());
+        try (XWPFDocument document = new XWPFDocument(new URL(FileUrlResolver.toAbsoluteUrl(documentDto.getDocUrl())).openStream());
                 XWPFWordExtractor extractor = new XWPFWordExtractor(document)) {
             String content = extractor.getText();
             FileParseRequest fileParseRequest = FileParseRequest.builder()

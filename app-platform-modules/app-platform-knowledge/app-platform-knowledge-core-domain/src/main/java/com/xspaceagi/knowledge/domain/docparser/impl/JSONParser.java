@@ -11,6 +11,7 @@ import com.xspaceagi.knowledge.domain.repository.IKnowledgeRawSegmentRepository;
 import com.xspaceagi.system.spec.common.UserContext;
 import com.xspaceagi.system.spec.exception.BizExceptionCodeEnum;
 import com.xspaceagi.system.spec.exception.KnowledgeException;
+import com.xspaceagi.system.spec.utils.FileUrlResolver;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -30,7 +31,7 @@ public class JSONParser implements DocParser {
 
     @Override
     public void chunk(KnowledgeDocumentModel documentDto, UserContext userContext) {
-        try (InputStream inputStream = new URL(documentDto.getDocUrl()).openStream()) {
+        try (InputStream inputStream = new URL(FileUrlResolver.toAbsoluteUrl(documentDto.getDocUrl())).openStream()) {
             String jsonContent = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
             Object parsed = JSON.parse(jsonContent);
 
