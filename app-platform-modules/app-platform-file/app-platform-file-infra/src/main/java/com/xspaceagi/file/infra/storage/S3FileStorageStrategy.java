@@ -34,6 +34,9 @@ public class S3FileStorageStrategy implements FileStorageStrategy {
     @Value("${s3.endpoint:}")
     private String endpoint;
 
+    @Value("${s3.public-endpoint:}")
+    private String publicEndpoint;
+
     @Value("${s3.access-key:}")
     private String accessKey;
 
@@ -72,8 +75,10 @@ public class S3FileStorageStrategy implements FileStorageStrategy {
                 if (s3Presigner == null) {
                     AwsBasicCredentials credentials = AwsBasicCredentials.create(accessKey, secretKey);
 
+                    String presignEndpoint = org.apache.commons.lang3.StringUtils.isNotBlank(publicEndpoint) ? publicEndpoint : endpoint;
+
                     software.amazon.awssdk.services.s3.presigner.S3Presigner.Builder builder = S3Presigner.builder()
-                            .endpointOverride(URI.create(endpoint))
+                            .endpointOverride(URI.create(presignEndpoint))
                             .credentialsProvider(StaticCredentialsProvider.create(credentials))
                             .region(Region.of(region));
 

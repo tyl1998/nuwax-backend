@@ -333,35 +333,18 @@ public class FileManagementController {
                         .headers(headers)
                         .body(new InputStreamResource(inputStream));
             } else {
-                // Cloud storage (s3/cos/oss): proxy download through backend
-                InputStream inputStream = fileManagementService.downloadFile(fileKey);
-                if (inputStream == null) {
-                    return ResponseEntity.notFound().build();
+                // Cloud storage (s3/cos/oss): generate presigned URL and 302 redirect, no database query needed
+                String signedUrl = fileManagementService.generatePresignedUrlByType(fileKey, storageType, 3600, download); // 1 hour validity
+                if (signedUrl == null) {
+                    log.error("Failed to generate presigned URL: storageType={}, fileKey={}", storageType, fileKey);
+                    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                            .body("Failed to generate presigned URL");
                 }
 
-                // Try to get file info from database for content type
-                FileRecordDomain fileRecord = null;
-                try {
-                    fileRecord = fileManagementService.getFileByKey(fileKey);
-                } catch (Exception e) {
-                    // ignore, file record may not exist for cloud storage
-                }
-
-                HttpHeaders headers = new HttpHeaders();
-                if (fileRecord != null && fileRecord.getFileType() != null) {
-                    headers.setContentType(MediaType.parseMediaType(fileRecord.getFileType()));
-                } else {
-                    headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-                }
-                if (download != null && download == 1) {
-                    String fileName = fileRecord != null && fileRecord.getFileName() != null ? fileRecord.getFileName() : fileKey.substring(fileKey.lastIndexOf("/") + 1);
-                    headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + URLEncoder.encode(fileName, StandardCharsets.UTF_8) + "\"");
-                } else {
-                    headers.add(HttpHeaders.CONTENT_DISPOSITION, "inline");
-                }
-                return ResponseEntity.ok()
-                        .headers(headers)
-                        .body(new InputStreamResource(inputStream));
+                log.info("302 redirect to presigned URL: storageType={}, fileKey={}", storageType, fileKey);
+                return ResponseEntity.status(HttpStatus.FOUND)
+                        .location(URI.create(signedUrl))
+                        .build();
             }
         } catch (Exception e) {
             log.error("File access failed: {}", fileKey, e);
