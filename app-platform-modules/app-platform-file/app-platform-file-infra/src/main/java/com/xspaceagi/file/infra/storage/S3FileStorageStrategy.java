@@ -75,10 +75,8 @@ public class S3FileStorageStrategy implements FileStorageStrategy {
                 if (s3Presigner == null) {
                     AwsBasicCredentials credentials = AwsBasicCredentials.create(accessKey, secretKey);
 
-                    String presignEndpoint = org.apache.commons.lang3.StringUtils.isNotBlank(publicEndpoint) ? publicEndpoint : endpoint;
-
                     software.amazon.awssdk.services.s3.presigner.S3Presigner.Builder builder = S3Presigner.builder()
-                            .endpointOverride(URI.create(presignEndpoint))
+                            .endpointOverride(URI.create(endpoint))
                             .credentialsProvider(StaticCredentialsProvider.create(credentials))
                             .region(Region.of(region));
 
@@ -186,6 +184,17 @@ public class S3FileStorageStrategy implements FileStorageStrategy {
 
             PresignedGetObjectRequest presignedRequest = presigner.presignGetObject(presignRequest);
             String url = presignedRequest.url().toString();
+
+            // Replace internal endpoint with public endpoint in URL
+            // Signature stays valid because it was computed with internal host
+            // nginx will proxy with internal host header for verification
+            if (org.apache.commons.lang3.StringUtils.isNotBlank(publicEndpoint)) {
+                String internalBase = endpoint.endsWith("/") ? endpoint : endpoint + "/";
+                String publicBase = publicEndpoint.endsWith("/") ? publicEndpoint : publicEndpoint + "/";
+                url = url.replace(internalBase, publicBase);
+                // Also replace without trailing slash
+                url = url.replace(endpoint, publicEndpoint);
+            }
 
             log.info("S3 presigned URL generated successfully: {}", fileKey);
             return url;
