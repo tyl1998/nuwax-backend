@@ -46,6 +46,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
@@ -138,6 +139,9 @@ public class SandboxAgentClient {
     private ModelApiProxyRpcService modelApiProxyRpcService;
 
     private RedisUtil redisUtil;
+
+    @Value("${platform.base-url:}")
+    private String platformBaseUrl;
 
     @Autowired
     public void setModelApiProxyRpcService(ModelApiProxyRpcService modelApiProxyRpcService) {
@@ -696,13 +700,19 @@ public class SandboxAgentClient {
         }
     }
 
-    private static AgentRequest.AgentServer buildAgentServer(AgentContext agentContext, SandboxServerConfig.SandboxServer sandboxServer, ModelConfigDto modelConfig) {
+    private AgentRequest.AgentServer buildAgentServer(AgentContext agentContext, SandboxServerConfig.SandboxServer sandboxServer, ModelConfigDto modelConfig) {
         Map<String, String> env = new HashMap<>();
         //追加环境变量
         TenantConfigDto tenantConfig = agentContext.getTenantConfig();
         String siteUrl = tenantConfig.getSiteUrl();
         siteUrl = siteUrl.endsWith("/") ? siteUrl.substring(0, siteUrl.length() - 1) : siteUrl;
-        env.put("PLATFORM_BASE_URL", siteUrl);
+        // 优先使用 platform.base-url（集群内容器可访问的地址）
+        String platformUrl = siteUrl;
+        if (StringUtils.isNotBlank(platformBaseUrl)) {
+            platformUrl = platformBaseUrl.trim();
+            platformUrl = platformUrl.endsWith("/") ? platformUrl.substring(0, platformUrl.length() - 1) : platformUrl;
+        }
+        env.put("PLATFORM_BASE_URL", platformUrl);
         env.put("SANDBOX_ID", sandboxServer.getServerId());
         env.put("SYS_USER_ID", String.valueOf(agentContext.getUserId()));
         env.put("CONVERSATION_ID", agentContext.getConversationId());
