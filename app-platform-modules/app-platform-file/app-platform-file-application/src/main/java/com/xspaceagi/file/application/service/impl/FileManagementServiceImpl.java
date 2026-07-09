@@ -263,6 +263,11 @@ public class FileManagementServiceImpl implements FileManagementService {
             return null;
         }
         String path = rest.substring(slash);
+        // 去掉 query（docUrl 可能已带一段 presigned 参数），避免污染 fileKey
+        int queryIdx = path.indexOf('?');
+        if (queryIdx >= 0) {
+            path = path.substring(0, queryIdx);
+        }
         String fileKey;
         if (path.startsWith("/nuwax-files/")) {
             fileKey = path.substring("/nuwax-files/".length());
