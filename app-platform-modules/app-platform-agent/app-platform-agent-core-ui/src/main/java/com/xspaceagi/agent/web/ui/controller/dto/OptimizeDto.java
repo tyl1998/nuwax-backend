@@ -21,6 +21,9 @@ public class OptimizeDto {
     @Schema(description = "智能体ID或工作流节点ID，可选")
     private Long id;
 
+    @Schema(description = "模型ID，可选，不传则使用租户默认对话模型")
+    private Long modelId;
+
     public enum TypeEnum {
         WORKFLOW_LLM_NODE,
         AGENT,

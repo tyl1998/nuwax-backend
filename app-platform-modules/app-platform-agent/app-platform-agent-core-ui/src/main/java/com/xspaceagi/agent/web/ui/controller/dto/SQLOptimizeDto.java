@@ -24,4 +24,7 @@ public class SQLOptimizeDto {
 
     @Schema(description = "节点已配置好的入参，可选")
     private List<Arg> inputArgs;
+
+    @Schema(description = "模型ID，可选，不传则使用租户默认对话模型")
+    private Long modelId;
 }

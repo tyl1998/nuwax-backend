@@ -18,4 +18,7 @@ public class CodeOptimizeDto {
 
     @Schema(description = "语言")
     private CodeLanguageEnum codeLanguage;
+
+    @Schema(description = "模型ID，可选，不传则使用租户默认对话模型")
+    private Long modelId;
 }

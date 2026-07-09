@@ -401,8 +401,8 @@ public class AssistantController extends BaseController {
             }
         }
         userPrompt.append(promptOptimizeDto.getPrompt());
-        ModelContext modelContext = buildModelContext(promptOptimizeDto.getRequestId(), OPTIMIZE_PROMPT.replace("{lang}", RequestContext.get().getLang()), userPrompt.toString());
-        return modelInvoker.invoke(modelContext);
+        ModelContext modelContext = buildModelContext(promptOptimizeDto.getRequestId(), OPTIMIZE_PROMPT.replace("{lang}", RequestContext.get().getLang()), userPrompt.toString(), promptOptimizeDto.getModelId());
+        return modelInvoker.invoke(modelContext).onErrorResume(e -> Flux.empty());
     }
 
     @Operation(summary = "Code Generation")
@@ -415,8 +415,8 @@ public class AssistantController extends BaseController {
         } else {
             systemPrompt = OPTIMIZE_PYTHON_PROMPT.replace("{lang}", RequestContext.get().getLang());
         }
-        ModelContext modelContext = buildModelContext(codeOptimizeDto.getRequestId(), systemPrompt, codeOptimizeDto.getPrompt());
-        return modelInvoker.invoke(modelContext);
+        ModelContext modelContext = buildModelContext(codeOptimizeDto.getRequestId(), systemPrompt, codeOptimizeDto.getPrompt(), codeOptimizeDto.getModelId());
+        return modelInvoker.invoke(modelContext).onErrorResume(e -> Flux.empty());
     }
 
     @Operation(summary = "SQL Generation")
@@ -452,12 +452,17 @@ public class AssistantController extends BaseController {
             stringBuilder.append("\nFor LIKE fuzzy queries, use $+variable, e.g., SELECT * FROM custom_table WHERE agent_name LIKE '%${{agent_name}}%';");
         }
 
-        ModelContext modelContext = buildModelContext(sqlOptimizeDto.getRequestId(), OPTIMIZE_SQL_PROMPT.replace("${lang}", RequestContext.get().getLang()), stringBuilder.toString());
-        return modelInvoker.invoke(modelContext);
+        ModelContext modelContext = buildModelContext(sqlOptimizeDto.getRequestId(), OPTIMIZE_SQL_PROMPT.replace("${lang}", RequestContext.get().getLang()), stringBuilder.toString(), sqlOptimizeDto.getModelId());
+        return modelInvoker.invoke(modelContext).onErrorResume(e -> Flux.empty());
     }
 
-    private ModelContext buildModelContext(String convId, String systemPrompt, String msg) {
-        ModelConfigDto modelConfigDto = modelApplicationService.queryDefaultModelConfig();
+    private ModelContext buildModelContext(String convId, String systemPrompt, String msg, Long modelId) {
+        ModelConfigDto modelConfigDto = modelId != null
+                ? modelApplicationService.queryModelConfigById(modelId)
+                : modelApplicationService.queryDefaultModelConfig();
+        if (modelConfigDto == null) {
+            throw BizException.of(ErrorCodeEnum.INVALID_PARAM, BizExceptionCodeEnum.agentModelNotFound);
+        }
         ModelContext modelContext = new ModelContext();
         AgentContext agentContext = new AgentContext();
         agentContext.setUser((UserDto) RequestContext.get().getUser());

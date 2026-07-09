@@ -62,6 +62,7 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.MimeType;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -510,8 +511,15 @@ public class ModelInvoker extends BaseComponent {
         if (!modelContext.getAgentContext().isInterrupted()) {
             log.error("stream call error", throwable);
         }
+        String errorText = throwable.getMessage();
+        if (throwable instanceof WebClientResponseException wcre) {
+            String body = wcre.getResponseBodyAsString();
+            if (StringUtils.isNotBlank(body)) {
+                errorText = errorText + "\n" + body;
+            }
+        }
         CallMessage callMessage = new CallMessage();
-        callMessage.setText(throwable.getMessage());
+        callMessage.setText(errorText);
         callMessage.setType(MessageTypeEnum.CHAT);
         callMessage.setRole(ChatMessageDto.Role.ASSISTANT);
         callMessage.setId(messageId);
