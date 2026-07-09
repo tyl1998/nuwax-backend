@@ -5,6 +5,8 @@ import com.xspaceagi.file.domain.model.FileRecordDomain;
 import com.xspaceagi.file.domain.repository.FileRecordRepository;
 import com.xspaceagi.file.domain.storage.FileStorageStrategy;
 import com.xspaceagi.system.application.dto.TenantConfigDto;
+import com.xspaceagi.system.spec.utils.FileUrlResolver;
+import jakarta.annotation.PostConstruct;
 import com.xspaceagi.system.application.service.TenantConfigApplicationService;
 import com.xspaceagi.system.spec.common.RequestContext;
 import com.xspaceagi.system.spec.tenant.thread.TenantFunctions;
@@ -233,5 +235,62 @@ public class FileManagementServiceImpl implements FileManagementService {
         }
 
         return strategy.generatePresignedUrl(fileKey, expireSeconds);
+    }
+
+    @PostConstruct
+    public void initInternalFileResolver() {
+        FileUrlResolver.setInternalResolver(this::resolveInternalFileUrl);
+    }
+
+    /**
+     * 将云存储文件 URL 解析为“集群内可达”的内部签名 URL。
+     * <p>
+     * 存储的 docUrl 形如：
+     * - http://{publicEndpoint}/nuwax-files/s3/default/20260709/{uuid}.pdf
+     * - http://{siteUrl}/api/f/s3/default/20260709/{uuid}.pdf
+     * 二者都对应 MinIO 对象 key = s3/default/20260709/{uuid}.pdf（bucket=nuwax-files）。
+     * 这里重新用 S3_ENDPOINT 生成签名 URL（host 与签名一致，且集群内可达）。
+     * 无法解析或非云存储时返回 null，由 FileUrlResolver 回退到原来的 localhost 逻辑。
+     */
+    public String resolveInternalFileUrl(String docUrl) {
+        if (docUrl == null) {
+            return null;
+        }
+        int idx = docUrl.indexOf("://");
+        String rest = idx >= 0 ? docUrl.substring(idx + 3) : docUrl;
+        int slash = rest.indexOf('/');
+        if (slash < 0) {
+            return null;
+        }
+        String path = rest.substring(slash);
+        String fileKey;
+        if (path.startsWith("/nuwax-files/")) {
+            fileKey = path.substring("/nuwax-files/".length());
+        } else if (path.startsWith("/api/f/")) {
+            fileKey = path.substring("/api/f/".length());
+        } else {
+            return null;
+        }
+        String[] parts = fileKey.split("/", 2);
+        if (parts.length < 2) {
+            return null;
+        }
+        String storageType = parts[0];
+        if (!"s3".equals(storageType) && !"cos".equals(storageType) && !"oss".equals(storageType)) {
+            return null;
+        }
+        FileStorageStrategy strategy = storageStrategyMap.values().stream()
+                .filter(s -> s.getStorageType().equals(storageType))
+                .findFirst()
+                .orElse(null);
+        if (strategy == null) {
+            return null;
+        }
+        try {
+            return strategy.generateInternalPresignedUrl(fileKey, 3600);
+        } catch (Exception e) {
+            log.warn("Failed to resolve internal file url: {}", docUrl, e);
+            return null;
+        }
     }
 }

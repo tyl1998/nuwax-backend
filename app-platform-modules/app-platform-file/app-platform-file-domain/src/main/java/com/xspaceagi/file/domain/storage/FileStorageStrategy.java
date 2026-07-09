@@ -66,6 +66,23 @@ public interface FileStorageStrategy {
     }
 
     /**
+     * 生成内部签名URL（用于后端集群内访问云存储）
+     * <p>
+     * 与 {@link #generatePresignedUrl(String, int)} 的区别：保留内部 endpoint
+     * （如 MinIO 的 172.17.x:9000），不替换为公网/办公网 public-endpoint。
+     * 这样后端在集群内访问时，URL 既可达（集群内网络）又签名有效（host 与签名一致）。
+     * </p>
+     * 默认实现直接复用公网签名URL（云存储未配置内部 endpoint 时的兜底）。
+     *
+     * @param fileKey 文件key
+     * @param expireSeconds 过期时间（秒）
+     * @return 内部可达的签名URL
+     */
+    default String generateInternalPresignedUrl(String fileKey, int expireSeconds) {
+        return generatePresignedUrl(fileKey, expireSeconds);
+    }
+
+    /**
      * 获取存储类型
      *
      * @return 存储类型

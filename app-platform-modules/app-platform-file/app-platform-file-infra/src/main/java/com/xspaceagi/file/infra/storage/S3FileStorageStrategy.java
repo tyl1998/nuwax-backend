@@ -160,6 +160,17 @@ public class S3FileStorageStrategy implements FileStorageStrategy {
 
     @Override
     public String generatePresignedUrl(String fileKey, int expireSeconds, String fileName) {
+        return doPresign(fileKey, expireSeconds, fileName, true);
+    }
+
+    @Override
+    public String generateInternalPresignedUrl(String fileKey, int expireSeconds) {
+        // 内部访问：保留 S3_ENDPOINT（集群内可达），不替换为公网/办公网 public-endpoint。
+        // 签名是基于 internal endpoint 计算的，host 与签名一致，MinIO 验签通过。
+        return doPresign(fileKey, expireSeconds, null, false);
+    }
+
+    private String doPresign(String fileKey, int expireSeconds, String fileName, boolean replacePublic) {
         try {
             S3Presigner presigner = getS3Presigner();
 
@@ -185,10 +196,10 @@ public class S3FileStorageStrategy implements FileStorageStrategy {
             PresignedGetObjectRequest presignedRequest = presigner.presignGetObject(presignRequest);
             String url = presignedRequest.url().toString();
 
-            // Replace internal endpoint with public endpoint in URL
-            // Signature stays valid because it was computed with internal host
-            // nginx will proxy with internal host header for verification
-            if (org.apache.commons.lang3.StringUtils.isNotBlank(publicEndpoint)) {
+            // 内部访问（replacePublic=false）保留 internal endpoint，不替换。
+            // 外部访问（replacePublic=true）将 internal endpoint 替换为 public-endpoint，
+            // 由 nginx 代理并以 internal host 头转发给 MinIO 验签。
+            if (replacePublic && org.apache.commons.lang3.StringUtils.isNotBlank(publicEndpoint)) {
                 String internalBase = endpoint.endsWith("/") ? endpoint : endpoint + "/";
                 String publicBase = publicEndpoint.endsWith("/") ? publicEndpoint : publicEndpoint + "/";
                 url = url.replace(internalBase, publicBase);
