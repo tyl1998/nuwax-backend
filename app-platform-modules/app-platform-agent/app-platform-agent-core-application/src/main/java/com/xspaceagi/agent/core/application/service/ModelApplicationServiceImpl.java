@@ -336,6 +336,7 @@ public class ModelApplicationServiceImpl implements ModelApplicationService {
             apiInfo.setUrl(obj.getString("url"));
             apiInfo.setKey(obj.getString("key"));
             apiInfo.setWeight(obj.getInteger("weight"));
+            apiInfo.setUseFullUrl(obj.getBoolean("useFullUrl"));
             apiInfoList.add(apiInfo);
         }
         return apiInfoList;

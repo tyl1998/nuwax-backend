@@ -45,6 +45,7 @@ import org.springframework.util.CollectionUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import java.net.URL;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -131,9 +132,18 @@ public class ModelClientFactory {
         if (apiInfo == null) {
             return null;
         }
-        String baseUrl = completeBaseUrl(apiInfo.getUrl());
+        String baseUrl;
+        String embeddingsPath;
+        if (Boolean.TRUE.equals(apiInfo.getUseFullUrl())) {
+            BaseUrlParts parts = splitFullUrl(apiInfo.getUrl());
+            baseUrl = parts.base;
+            embeddingsPath = parts.path;
+        } else {
+            baseUrl = completeBaseUrl(apiInfo.getUrl());
+            embeddingsPath = "/embeddings";
+        }
         OpenAiApi openAiApi = new OpenAiApi(baseUrl, new SimpleApiKey(apiInfo.getKey()), CollectionUtils.toMultiValueMap(Map.of()),
-                "/chat/completions", "/embeddings", restClientBuilder.clone(), cloneWebClientBuilder(),
+                "/chat/completions", embeddingsPath, restClientBuilder.clone(), cloneWebClientBuilder(),
                 RetryUtils.DEFAULT_RESPONSE_ERROR_HANDLER);
         return new OpenAiEmbeddingModel(openAiApi, MetadataMode.EMBED, OpenAiEmbeddingOptions.builder()
                 .model(model.getModel())
@@ -152,6 +162,10 @@ public class ModelClientFactory {
         if (apiInfo == null) {
             return null;
         }
+        // 记录原始 apiInfo（后续可能被代理配置覆盖），用于 useFullUrl 直接连接场景
+        final boolean originalUseFullUrl = Boolean.TRUE.equals(apiInfo.getUseFullUrl());
+        final String originalApiUrl = apiInfo.getUrl();
+        final String originalApiKey = apiInfo.getKey();
 
         boolean isReasoningModel = model.getIsReasonModel() != null && model.getIsReasonModel() == 1;
         Double temperature = model.getTemperature() == null || model.getTemperature() > 1 || model.getTemperature() <= 0 ? 1 : model.getTemperature();
@@ -196,8 +210,18 @@ public class ModelClientFactory {
                     .topP(topP)
                     .extraBody(buildExtraBody(model))
                     .build();
-            OpenAiApi api = new OpenAiApi(apiInfo.getUrl(), new SimpleApiKey(apiInfo.getKey()), CollectionUtils.toMultiValueMap(Map.of()),
-                    "/chat/completions", "/embeddings", restClientBuilder.clone(), cloneWebClientBuilder(), RetryUtils.DEFAULT_RESPONSE_ERROR_HANDLER);
+            String chatBaseUrl;
+            String completionsPath;
+            if (originalUseFullUrl) {
+                BaseUrlParts parts = splitFullUrl(originalApiUrl);
+                chatBaseUrl = parts.base;
+                completionsPath = parts.path;
+            } else {
+                chatBaseUrl = apiInfo.getUrl();
+                completionsPath = "/chat/completions";
+            }
+            OpenAiApi api = new OpenAiApi(chatBaseUrl, new SimpleApiKey(originalUseFullUrl ? originalApiKey : apiInfo.getKey()), CollectionUtils.toMultiValueMap(Map.of()),
+                    completionsPath, "/embeddings", restClientBuilder.clone(), cloneWebClientBuilder(), RetryUtils.DEFAULT_RESPONSE_ERROR_HANDLER);
             chatModel = new OpenAiChatModel(api, promptOptions, DefaultToolCallingManager.builder().build(), RetryUtils.DEFAULT_RETRY_TEMPLATE, ObservationRegistry.NOOP);
         }
 
@@ -270,6 +294,36 @@ public class ModelClientFactory {
             }
         }
         return baseUrl;
+    }
+
+    /**
+     * 将完整 URL 拆分为 base(scheme://host[:port]) 与 path，供 useFullUrl 场景直接使用自定义全路径。
+     */
+    private static BaseUrlParts splitFullUrl(String fullUrl) {
+        try {
+            URL u = new URL(fullUrl);
+            String base = u.getProtocol() + "://" + u.getHost();
+            if (u.getPort() != -1) {
+                base += ":" + u.getPort();
+            }
+            String path = u.getPath();
+            if (path == null || path.isEmpty()) {
+                path = "/";
+            }
+            return new BaseUrlParts(base, path);
+        } catch (Exception e) {
+            return new BaseUrlParts(fullUrl, "/");
+        }
+    }
+
+    private static class BaseUrlParts {
+        final String base;
+        final String path;
+
+        BaseUrlParts(String base, String path) {
+            this.base = base;
+            this.path = path;
+        }
     }
 
     private static String normalizeAnthropicBaseUrl(String baseUrl) {
