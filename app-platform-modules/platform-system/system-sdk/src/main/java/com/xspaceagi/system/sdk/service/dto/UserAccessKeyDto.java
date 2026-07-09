@@ -55,6 +55,7 @@ public class UserAccessKeyDto {
         private Boolean enabled;
         private Long modelId;
         private String modelBaseUrl;
+        private Boolean useFullUrl;
         private String modelApiKey;
         private String conversationId;
         private String modelName;

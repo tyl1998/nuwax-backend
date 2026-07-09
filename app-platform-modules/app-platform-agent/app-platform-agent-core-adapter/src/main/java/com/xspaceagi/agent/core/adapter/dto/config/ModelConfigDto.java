@@ -120,6 +120,9 @@ public class ModelConfigDto implements Serializable {
         @Schema(description = "权重")
         private Integer weight;
 
+        @Schema(description = "是否使用完整URL(免拼接)：true=直接使用url作为完整目标地址，不再追加请求路径")
+        private Boolean useFullUrl;
+
         public Integer getWeight() {
             return weight == null ? 1 : weight;
         }

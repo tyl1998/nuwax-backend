@@ -153,7 +153,21 @@ public class HttpProxyRequestHandler extends ChannelInboundHandlerAdapter {
                 targetIp = ip;
                 targetHost = url.getHost();
                 targetPort = port;
-                request.setUri(url.getPath() + replaceModelPrefix(request.uri(), url.getPath()));
+
+                String targetPath;
+                if (Boolean.TRUE.equals(backendModelDto.getUseFullUrl())) {
+                    // 免拼接：直接使用配置 URL 的完整 path，忽略进来的请求后缀
+                    targetPath = url.getPath();
+                    if (targetPath == null || targetPath.isEmpty()) {
+                        targetPath = "/";
+                    } else if (!targetPath.startsWith("/")) {
+                        targetPath = "/" + targetPath;
+                    }
+                } else {
+                    // 原逻辑：基址路径 + 剥离代理前缀后的请求后缀
+                    targetPath = url.getPath() + replaceModelPrefix(request.uri(), url.getPath());
+                }
+                request.setUri(targetPath);
                 request.headers().set("Host", url.getHost());
                 //认证信息替换
                 if (StringUtils.isNotBlank(authorization)) {

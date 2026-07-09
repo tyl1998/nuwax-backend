@@ -12,6 +12,7 @@ public class BackendModelDto {
     private String requestId;
     private String conversationId;
     private String baseUrl;
+    private Boolean useFullUrl;
     private String apiKey;
     private String modelName;
     private String protocol;

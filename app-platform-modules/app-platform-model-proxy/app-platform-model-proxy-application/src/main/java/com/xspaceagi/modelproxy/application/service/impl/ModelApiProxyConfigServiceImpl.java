@@ -120,6 +120,7 @@ public class ModelApiProxyConfigServiceImpl implements IModelApiProxyConfigServi
             userAccessKeyDto.getConfig().setConversationId(userAccessKeyDto.getUserId().toString());
             userAccessKeyDto.getConfig().setRequestId(UUID.randomUUID().toString().replace("-", ""));
             userAccessKeyDto.getConfig().setModelBaseUrl(apiInfo.getUrl());
+            userAccessKeyDto.getConfig().setUseFullUrl(apiInfo.getUseFullUrl());
             userAccessKeyDto.getConfig().setTraceContext(TraceContext.builder()
                     .nickName(userAccessKeyDto.getConfig().getUserName())
                     .tenantId(userAccessKeyDto.getTenantId())
@@ -140,6 +141,7 @@ public class ModelApiProxyConfigServiceImpl implements IModelApiProxyConfigServi
         BackendModelDto backendModelDto = new BackendModelDto();
         backendModelDto.setModelId(userAccessKeyDto.getConfig().getModelId());
         backendModelDto.setBaseUrl(userAccessKeyDto.getConfig().getModelBaseUrl());
+        backendModelDto.setUseFullUrl(userAccessKeyDto.getConfig().getUseFullUrl());
         backendModelDto.setApiKey(userAccessKeyDto.getConfig().getModelApiKey());
         backendModelDto.setModelName(userAccessKeyDto.getConfig().getModelName());
         backendModelDto.setProtocol(userAccessKeyDto.getConfig().getProtocol());
@@ -201,6 +203,7 @@ public class ModelApiProxyConfigServiceImpl implements IModelApiProxyConfigServi
                             .modelId(backendModel.getModelId())
                             .modelApiKey(backendModel.getApiKey())
                             .modelBaseUrl(backendModel.getBaseUrl())
+                            .useFullUrl(backendModel.getUseFullUrl())
                             .modelName(backendModel.getModelName())
                             .protocol(backendModel.getProtocol())
                             .scope(backendModel.getScope())
@@ -212,12 +215,13 @@ public class ModelApiProxyConfigServiceImpl implements IModelApiProxyConfigServi
                             .build());
         } else {
             userAccessKeyRpcService.updateAccessKey(userAccessKeyDto.getId(), UserAccessKeyDto.UserAccessKeyConfig.builder()
-                    .modelId(backendModel.getModelId())
-                    .modelApiKey(backendModel.getApiKey())
-                    .modelBaseUrl(backendModel.getBaseUrl())
-                    .modelName(backendModel.getModelName())
-                    .protocol(backendModel.getProtocol())
-                    .scope(backendModel.getScope())
+                            .modelId(backendModel.getModelId())
+                            .modelApiKey(backendModel.getApiKey())
+                            .modelBaseUrl(backendModel.getBaseUrl())
+                            .useFullUrl(backendModel.getUseFullUrl())
+                            .modelName(backendModel.getModelName())
+                            .protocol(backendModel.getProtocol())
+                            .scope(backendModel.getScope())
                     .enabled(true)
                     .userName(backendModel.getUserName())
                     .conversationId(backendModel.getConversationId())
