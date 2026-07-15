@@ -499,7 +499,14 @@ public class ModelInvoker extends BaseComponent {
 
         if (assistantMessage.getMetadata() != null && (waitingForToolCallInfo == null || !waitingForToolCallInfo.get())) {
             Object finishReason = assistantMessage.getMetadata().get("finishReason");
-            if (finishReason != null && !"".equals(finishReason.toString()) && !finishReason.equals("tool_call") && !finishReason.equals("tool_calls")) {
+            // Some models / OpenAI-compatible gateways emit assistant content together with a tool_call
+            // but report a non tool-call finishReason (e.g. "stop"). If we finish here, the SSE sink is
+            // completed before Spring AI's internal tool execution and the follow-up completion finish,
+            // so the tool result (e.g. image_generation URL) never reaches the message. Skip finishing
+            // whenever the current chunk still carries pending tool calls; the real end is handled by
+            // doOnComplete once the whole stream (including post-tool completion) is done.
+            boolean hasPendingToolCalls = CollectionUtils.isNotEmpty(assistantMessage.getToolCalls());
+            if (!hasPendingToolCalls && finishReason != null && !"".equals(finishReason.toString()) && !finishReason.equals("tool_call") && !finishReason.equals("tool_calls")) {
                 handleFinish(modelContext, sink, messageId, msgSb.toString(), finishReason.toString());
                 finished.set(true);
             }
