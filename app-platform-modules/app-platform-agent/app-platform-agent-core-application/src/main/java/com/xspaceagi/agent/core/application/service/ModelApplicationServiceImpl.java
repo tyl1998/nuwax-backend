@@ -337,6 +337,7 @@ public class ModelApplicationServiceImpl implements ModelApplicationService {
             apiInfo.setKey(obj.getString("key"));
             apiInfo.setWeight(obj.getInteger("weight"));
             apiInfo.setUseFullUrl(obj.getBoolean("useFullUrl"));
+            apiInfo.setIsMultimodalEmbedding(obj.getBoolean("isMultimodalEmbedding"));
             apiInfoList.add(apiInfo);
         }
         return apiInfoList;

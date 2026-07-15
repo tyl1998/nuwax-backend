@@ -145,11 +145,12 @@ public class ModelClientFactory {
         OpenAiApi openAiApi = new OpenAiApi(baseUrl, new SimpleApiKey(apiInfo.getKey()), CollectionUtils.toMultiValueMap(Map.of()),
                 "/chat/completions", embeddingsPath, restClientBuilder.clone(), cloneWebClientBuilder(),
                 RetryUtils.DEFAULT_RESPONSE_ERROR_HANDLER);
+        boolean multimodal = Boolean.TRUE.equals(apiInfo.getIsMultimodalEmbedding());
         return new OpenAiEmbeddingModel(openAiApi, MetadataMode.EMBED, OpenAiEmbeddingOptions.builder()
                 .model(model.getModel())
                 .dimensions(model.getDimension())
                 .build()
-                , RetryUtils.DEFAULT_RETRY_TEMPLATE);
+                , RetryUtils.DEFAULT_RETRY_TEMPLATE, multimodal);
     }
 
     public ChatClient createChatClient(ModelContext modelContext, ModelConfigDto model, List<ToolCallback> functionCallbacks) {

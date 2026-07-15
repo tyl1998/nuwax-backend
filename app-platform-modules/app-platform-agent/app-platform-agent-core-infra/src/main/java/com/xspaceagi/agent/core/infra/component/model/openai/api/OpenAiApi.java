@@ -2071,6 +2071,64 @@ public class OpenAiApi {
 			@JsonProperty("usage") Usage usage) { // @formatter:on
     }
 
+	/**
+	 * 多模态向量化请求输入项（如豆包 doubao-embedding-vision）。
+	 * 兼容文本 / 图片 / 视频的类型化输入，替代 OpenAI 风格的字符串数组。
+	 */
+	@JsonInclude(Include.NON_NULL)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record MultimodalEmbeddingInput(// @formatter:off
+			@JsonProperty("type") String type,
+			@JsonProperty("text") String text,
+			@JsonProperty("image_url") Object imageUrl,
+			@JsonProperty("video_url") Object videoUrl) { // @formatter:on
+	}
+
+	/**
+	 * 豆包多模态向量化接口返回的 data 节点（单个对象，而非数组）。
+	 */
+	@JsonInclude(Include.NON_NULL)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ArkMultimodalEmbeddingData(// @formatter:off
+			@JsonProperty("embedding") float[] embedding) { // @formatter:on
+	}
+
+	/**
+	 * 豆包多模态向量化接口响应。与标准 OpenAI 不同，{@code data} 为单个对象。
+	 */
+	@JsonInclude(Include.NON_NULL)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ArkMultimodalEmbeddingResponse(// @formatter:off
+			@JsonProperty("object") String object,
+			@JsonProperty("data") ArkMultimodalEmbeddingData data,
+			@JsonProperty("model") String model,
+			@JsonProperty("id") String id,
+			@JsonProperty("created") Long created,
+			@JsonProperty("usage") Usage usage) { // @formatter:on
+	}
+
+	/**
+	 * 多模态向量化请求（input 为类型化对象数组）。直接打到多模态 endpoint，
+	 * 响应按 {@link ArkMultimodalEmbeddingResponse} 解析。
+	 */
+	public ResponseEntity<ArkMultimodalEmbeddingResponse> embeddingsMultimodal(
+			EmbeddingRequest<List<MultimodalEmbeddingInput>> embeddingRequest) {
+
+		Assert.notNull(embeddingRequest, REQUEST_BODY_NULL_MESSAGE);
+		Assert.notNull(embeddingRequest.input(), "The input can not be null.");
+		Assert.isTrue(embeddingRequest.input() instanceof List,
+				"The multimodal input must be a List of typed parts.");
+
+		return this.restClient.post()
+				.uri(this.embeddingsPath)
+				.headers(this::addDefaultHeadersIfMissing)
+				.body(embeddingRequest)
+				.retrieve()
+				.toEntity(new ParameterizedTypeReference<>() {
+
+				});
+	}
+
     public static final class Builder {
 
         public Builder() {

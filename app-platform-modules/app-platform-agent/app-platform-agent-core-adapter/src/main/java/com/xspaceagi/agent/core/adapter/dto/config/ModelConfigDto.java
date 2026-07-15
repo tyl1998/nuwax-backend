@@ -123,6 +123,9 @@ public class ModelConfigDto implements Serializable {
         @Schema(description = "是否使用完整URL(免拼接)：true=直接使用url作为完整目标地址，不再追加请求路径")
         private Boolean useFullUrl;
 
+        @Schema(description = "是否多模态向量模型(图文/视频)，如豆包 doubao-embedding-vision：true=使用类型化 input 与多模态响应解析")
+        private Boolean isMultimodalEmbedding;
+
         public Integer getWeight() {
             return weight == null ? 1 : weight;
         }

@@ -37,6 +37,7 @@ import org.springframework.ai.retry.RetryUtils;
 import org.springframework.retry.support.RetryTemplate;
 import org.springframework.util.Assert;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -66,6 +67,11 @@ public class OpenAiEmbeddingModel extends AbstractEmbeddingModel {
 	 * Observation registry used for instrumentation.
 	 */
 	private final ObservationRegistry observationRegistry;
+
+	/**
+	 * 是否多模态向量模型：true 时使用类型化 input 与多模态响应解析。
+	 */
+	private final boolean multimodal;
 
 	/**
 	 * Conventions to use for generating observations.
@@ -110,7 +116,12 @@ public class OpenAiEmbeddingModel extends AbstractEmbeddingModel {
 	 */
 	public OpenAiEmbeddingModel(OpenAiApi openAiApi, MetadataMode metadataMode, OpenAiEmbeddingOptions options,
 			RetryTemplate retryTemplate) {
-		this(openAiApi, metadataMode, options, retryTemplate, ObservationRegistry.NOOP);
+		this(openAiApi, metadataMode, options, retryTemplate, ObservationRegistry.NOOP, false);
+	}
+
+	public OpenAiEmbeddingModel(OpenAiApi openAiApi, MetadataMode metadataMode, OpenAiEmbeddingOptions options,
+			RetryTemplate retryTemplate, boolean multimodal) {
+		this(openAiApi, metadataMode, options, retryTemplate, ObservationRegistry.NOOP, multimodal);
 	}
 
 	/**
@@ -123,6 +134,11 @@ public class OpenAiEmbeddingModel extends AbstractEmbeddingModel {
 	 */
 	public OpenAiEmbeddingModel(OpenAiApi openAiApi, MetadataMode metadataMode, OpenAiEmbeddingOptions options,
 			RetryTemplate retryTemplate, ObservationRegistry observationRegistry) {
+		this(openAiApi, metadataMode, options, retryTemplate, observationRegistry, false);
+	}
+
+	public OpenAiEmbeddingModel(OpenAiApi openAiApi, MetadataMode metadataMode, OpenAiEmbeddingOptions options,
+			RetryTemplate retryTemplate, ObservationRegistry observationRegistry, boolean multimodal) {
 		Assert.notNull(openAiApi, "openAiApi must not be null");
 		Assert.notNull(metadataMode, "metadataMode must not be null");
 		Assert.notNull(options, "options must not be null");
@@ -134,6 +150,7 @@ public class OpenAiEmbeddingModel extends AbstractEmbeddingModel {
 		this.defaultOptions = options;
 		this.retryTemplate = retryTemplate;
 		this.observationRegistry = observationRegistry;
+		this.multimodal = multimodal;
 	}
 
 	@Override
@@ -150,6 +167,9 @@ public class OpenAiEmbeddingModel extends AbstractEmbeddingModel {
 
 	@Override
 	public EmbeddingResponse call(EmbeddingRequest request) {
+		if (this.multimodal) {
+			return callMultimodal(request);
+		}
 		// Before moving any further, build the final request EmbeddingRequest,
 		// merging runtime and default options.
 		EmbeddingRequest embeddingRequest = buildEmbeddingRequest(request);
@@ -188,6 +208,30 @@ public class OpenAiEmbeddingModel extends AbstractEmbeddingModel {
 
 				return embeddingResponse;
 			});
+	}
+
+	private EmbeddingResponse callMultimodal(EmbeddingRequest request) {
+		EmbeddingRequest embeddingRequest = buildEmbeddingRequest(request);
+		OpenAiEmbeddingOptions options = (OpenAiEmbeddingOptions) embeddingRequest.getOptions();
+		List<String> texts = embeddingRequest.getInstructions();
+		List<Embedding> embeddings = new ArrayList<>(texts.size());
+		for (int i = 0; i < texts.size(); i++) {
+			String text = texts.get(i);
+			List<OpenAiApi.MultimodalEmbeddingInput> parts = List
+					.of(new OpenAiApi.MultimodalEmbeddingInput("text", text, null, null));
+			OpenAiApi.EmbeddingRequest<List<OpenAiApi.MultimodalEmbeddingInput>> apiRequest = new OpenAiApi.EmbeddingRequest<>(
+					parts, options.getModel(), options.getEncodingFormat(), options.getDimensions(), options.getUser());
+			OpenAiApi.ArkMultimodalEmbeddingResponse response = this.retryTemplate
+					.execute(ctx -> this.openAiApi.embeddingsMultimodal(apiRequest).getBody());
+			if (response == null || response.data() == null) {
+				logger.warn("No multimodal embeddings returned for request: {}", request);
+				embeddings.add(new Embedding(new float[0], i));
+				continue;
+			}
+			embeddings.add(new Embedding(response.data().embedding(), i));
+		}
+		EmbeddingResponseMetadata metadata = new EmbeddingResponseMetadata(options.getModel(), new EmptyUsage());
+		return new EmbeddingResponse(embeddings, metadata);
 	}
 
 	@Override
