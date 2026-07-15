@@ -240,6 +240,11 @@ public class ModelInvoker extends BaseComponent {
         String messageId = modelContext.getRequestId();
         AtomicBoolean thinking = new AtomicBoolean(false);
         AtomicBoolean finished = new AtomicBoolean(false);
+        // Set when the latest streamed assistant message still carries pending tool calls.
+        // Some models (e.g. Tencent Hy3) emit tool_calls together with finishReason="stop". When that
+        // happens the first flux segment completes while Spring AI is still executing the tool and
+        // streaming the follow-up completion, so the SSE must not be finalized/closed here.
+        AtomicBoolean pendingToolCalls = new AtomicBoolean(false);
         Disposable disposable = chatClientRequestSpec.stream().chatResponse().onErrorResume(throwable -> {
             if (throwable instanceof TimeoutException) {
                 return Mono.error(new TimeoutException("Model execution timeout"));
@@ -249,15 +254,22 @@ public class ModelInvoker extends BaseComponent {
             }
             return Mono.error(throwable);
         }).doOnComplete(() -> {
-            if (!finished.get()) {
-                handleFinish(modelContext, sink, messageId, finalMsgSb.toString(), "stop");
+            if (finished.get() || pendingToolCalls.get()) {
+                // finished==true: already finalized inside doMessage.
+                // pendingToolCalls==true: the stream ended while a tool is still being executed by
+                // Spring AI (the model returned tool_calls with a non tool-call finishReason); the real
+                // end is the completion of the post-tool round, so let it drive the finalization.
+                log.info("stream doOnComplete skipped: finished={}, pendingToolCalls={}", finished.get(), pendingToolCalls.get());
+                return;
             }
+            log.info("stream doOnComplete finalize: finished={}, pendingToolCalls={}", finished.get(), pendingToolCalls.get());
+            handleFinish(modelContext, sink, messageId, finalMsgSb.toString(), "stop");
         }).subscribe(chatResponse -> {
             if (chatResponse.getResult() == null) {
                 return;
             }
             AssistantMessage assistantMessage = chatResponse.getResult().getOutput();
-            doMessage(modelContext, sink, messageId, assistantMessage, assistantMessage.getText(), finalMsgSb, thinking, finished, null);
+            doMessage(modelContext, sink, messageId, assistantMessage, assistantMessage.getText(), finalMsgSb, thinking, finished, null, pendingToolCalls);
         }, throwable -> doOnError(modelContext, sink, messageId, throwable));
         atomicReference.set(disposable);
         return atomicReference;
@@ -336,7 +348,7 @@ public class ModelInvoker extends BaseComponent {
                 }
             }
 
-            doMessage(modelContext, sink, messageId, assistantMessage, text, finalMsgSb, thinking, finished, waitingForToolCallInfo);
+            doMessage(modelContext, sink, messageId, assistantMessage, text, finalMsgSb, thinking, finished, waitingForToolCallInfo, null);
         }, throwable -> doOnError(modelContext, sink, messageId, throwable));
         // Can be dynamically replaced during react process
         atomicReference.set(disposable);
@@ -411,7 +423,8 @@ public class ModelInvoker extends BaseComponent {
     }
 
     private void doMessage(ModelContext modelContext, Sinks.Many<CallMessage> sink, String messageId, AssistantMessage assistantMessage,
-                           String text, StringBuilder msgSb, AtomicBoolean thinking, AtomicBoolean finished, AtomicBoolean waitingForToolCallInfo) {
+                           String text, StringBuilder msgSb, AtomicBoolean thinking, AtomicBoolean finished, AtomicBoolean waitingForToolCallInfo,
+                           AtomicBoolean pendingToolCalls) {
         if (modelContext.getAgentContext().isInterrupted()) {
             if (thinking.get()) {
                 msgSb.append("</think>");
@@ -506,6 +519,9 @@ public class ModelInvoker extends BaseComponent {
             // whenever the current chunk still carries pending tool calls; the real end is handled by
             // doOnComplete once the whole stream (including post-tool completion) is done.
             boolean hasPendingToolCalls = CollectionUtils.isNotEmpty(assistantMessage.getToolCalls());
+            if (pendingToolCalls != null) {
+                pendingToolCalls.set(hasPendingToolCalls);
+            }
             if (!hasPendingToolCalls && finishReason != null && !"".equals(finishReason.toString()) && !finishReason.equals("tool_call") && !finishReason.equals("tool_calls")) {
                 handleFinish(modelContext, sink, messageId, msgSb.toString(), finishReason.toString());
                 finished.set(true);
