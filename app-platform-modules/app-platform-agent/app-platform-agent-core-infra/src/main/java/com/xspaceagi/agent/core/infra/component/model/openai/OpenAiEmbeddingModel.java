@@ -219,8 +219,9 @@ public class OpenAiEmbeddingModel extends AbstractEmbeddingModel {
 			String text = texts.get(i);
 			List<OpenAiApi.MultimodalEmbeddingInput> parts = List
 					.of(new OpenAiApi.MultimodalEmbeddingInput("text", text, null, null));
+			// 多模态向量接口(豆包 doubao-embedding-vision 等)不支持 dimensions 参数，置空避免 400
 			OpenAiApi.EmbeddingRequest<List<OpenAiApi.MultimodalEmbeddingInput>> apiRequest = new OpenAiApi.EmbeddingRequest<>(
-					parts, options.getModel(), options.getEncodingFormat(), options.getDimensions(), options.getUser());
+					parts, options.getModel(), options.getEncodingFormat(), null, options.getUser());
 			OpenAiApi.ArkMultimodalEmbeddingResponse response = this.retryTemplate
 					.execute(ctx -> this.openAiApi.embeddingsMultimodal(apiRequest).getBody());
 			if (response == null || response.data() == null) {
