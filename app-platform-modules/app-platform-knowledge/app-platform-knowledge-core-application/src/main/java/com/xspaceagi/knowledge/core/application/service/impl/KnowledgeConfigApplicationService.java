@@ -113,25 +113,16 @@ public class KnowledgeConfigApplicationService implements IKnowledgeConfigApplic
         var spaceId = existObj.getSpaceId();
         spacePermissionService.checkSpaceUserPermission(spaceId);
 
-        // 仅在向量模型发生变化时，才考虑重建向量集合
+        // 向量模型发生变化（id 不同，含“同维度不同厂商”）时，必须重建向量集合与重向量化：
+        // 不同模型的向量处于不同向量空间，即使维度相同也不能混用（写入/查询共用同一模型，旧向量不可复用）。
         if (existObj.getEmbeddingModelId() != null
                 && !existObj.getEmbeddingModelId().equals(model.getEmbeddingModelId())) {
 
-            // 对比新旧向量模型的维度：维度不同才需要重建集合与重向量化；
-            // 维度相同则旧向量仍可被新模型复用（写入/查询使用同一模型配置），跳过重建避免无谓的清空与重算。
-            // 若任一模型维度无法获取，则保守地按“维度变化”处理，执行重建，避免维度不匹配的写入冲突。
             Integer oldDim = queryModelDimension(existObj.getEmbeddingModelId());
             Integer newDim = queryModelDimension(model.getEmbeddingModelId());
-
-            boolean sameDimension = oldDim != null && newDim != null && oldDim.equals(newDim);
-            if (sameDimension) {
-                log.info("KB [{}] embedding model changed but dimension unchanged ({} -> {}), skip rebuild",
-                        model.getId(), oldDim, newDim);
-                return this.knowledgeConfigDomainService.updateInfo(model, userContext);
-            }
-
-            log.info("KB [{}] embedding model changed with dimension changed/null ({} -> {}), rebuild collection",
-                    model.getId(), oldDim, newDim);
+            log.info("KB [{}] embedding model changed ({} dim {} -> {} dim {}), rebuild collection",
+                    model.getId(), existObj.getEmbeddingModelId(), oldDim,
+                    model.getEmbeddingModelId(), newDim);
 
             // 先标记该知识库下的问答为待向量化
             String updateSql = " update knowledge_qa_segment set has_embedding = ?, created = now() where kb_id = ? ";
