@@ -10,6 +10,7 @@ import com.xspaceagi.knowledge.domain.repository.IKnowledgeConfigRepository;
 import com.xspaceagi.knowledge.domain.repository.IKnowledgeQaSegmentRepository;
 import com.xspaceagi.knowledge.domain.service.IKnowledgeConfigDomainService;
 import com.xspaceagi.knowledge.domain.service.impl.KnowledgeQaSegmentDomainService;
+import com.xspaceagi.agent.core.adapter.application.ModelApplicationService;
 import com.xspaceagi.knowledge.domain.vectordb.VectorDBService;
 import com.xspaceagi.system.sdk.permission.SpacePermissionService;
 import com.xspaceagi.system.spec.common.UserContext;
@@ -61,6 +62,9 @@ public class KnowledgeConfigApplicationService implements IKnowledgeConfigApplic
     private VectorDBService vectorDBService;
 
     @Resource
+    private ModelApplicationService modelApplicationService;
+
+    @Resource
     private IKnowledgeQaSegmentRepository knowledgeQaSegmentRepository;
 
     @Override
@@ -109,47 +113,69 @@ public class KnowledgeConfigApplicationService implements IKnowledgeConfigApplic
         var spaceId = existObj.getSpaceId();
         spacePermissionService.checkSpaceUserPermission(spaceId);
 
-        //新增的内容
-        System.out.println("updateInfo========start=1>");
-        if(existObj.getEmbeddingModelId() != model.getEmbeddingModelId()) {
-            //当模型发生变化的时候会更新生成问题的方法，并根据问题进行向量化
-            System.out.println("updateInfo========start=2>");
-            //批量更新生成问答的数据状态
-            String updateSql = " update knowledge_qa_segment set has_embedding = ?, created = now() where kb_id = ? ";
-            jdbcTemplate.update(updateSql, new Object[]{0, model.getId()});
+        // 仅在向量模型发生变化时，才考虑重建向量集合
+        if (existObj.getEmbeddingModelId() != null
+                && !existObj.getEmbeddingModelId().equals(model.getEmbeddingModelId())) {
 
-            //主动推一次生成问题的行为
-            String querysql = " select id from knowledge_qa_segment where kb_id = ? ";
-            List<Map<String, Object>> list = jdbcTemplate.queryForList(querysql, new Object[] {model.getId()}) ;
+            // 对比新旧向量模型的维度：维度不同才需要重建集合与重向量化；
+            // 维度相同则旧向量仍可被新模型复用（写入/查询使用同一模型配置），跳过重建避免无谓的清空与重算。
+            // 若任一模型维度无法获取，则保守地按“维度变化”处理，执行重建，避免维度不匹配的写入冲突。
+            Integer oldDim = queryModelDimension(existObj.getEmbeddingModelId());
+            Integer newDim = queryModelDimension(model.getEmbeddingModelId());
+
+            boolean sameDimension = oldDim != null && newDim != null && oldDim.equals(newDim);
+            if (sameDimension) {
+                log.info("KB [{}] embedding model changed but dimension unchanged ({} -> {}), skip rebuild",
+                        model.getId(), oldDim, newDim);
+                return this.knowledgeConfigDomainService.updateInfo(model, userContext);
+            }
+
+            log.info("KB [{}] embedding model changed with dimension changed/null ({} -> {}), rebuild collection",
+                    model.getId(), oldDim, newDim);
+
+            // 先标记该知识库下的问答为待向量化
+            String updateSql = " update knowledge_qa_segment set has_embedding = ?, created = now() where kb_id = ? ";
+            jdbcTemplate.update(updateSql, new Object[] { 0, model.getId() });
+
+            // 删除旧集合，并【同步】按新模型维度重建空集合，避免异步重向量化与查询并发时
+            // 出现“新维度向量写入旧维度集合”的维度冲突（2048 != 1536）
+            vectorDBService.deleteCollection(model.getId());
+            vectorDBService.initAndCheckCollection(model.getId(), model.getEmbeddingModelId());
+
+            // 查询该知识库下所有问答，异步用新模型重新向量化
+            String querySql = " select id from knowledge_qa_segment where kb_id = ? ";
+            List<Map<String, Object>> list = jdbcTemplate.queryForList(querySql,
+                    new Object[] { model.getId() });
             List<Long> ids = new ArrayList<>();
-            if ( list != null && list.size() > 0) {
+            if (list != null) {
                 for (Map<String, Object> map : list) {
                     ids.add((Long) map.get("id"));
                 }
             }
-            //先移除掉向量化的数据
-            vectorDBService.deleteCollection(model.getId());
-            //vectorDBService.removeQa(ids, model.getId());
-            if(ids != null && ids.size() > 0) {
-                List<KnowledgeQaSegmentModel> modelList = knowledgeQaSegmentRepository.queryListByIds(ids);
-                // 批量对新增的问答,进行向量化
-                var runnable = new TenantRunnable(() -> {
-                    knowledgeQaSegmentDomainService.batchAddEmbeddingQa(modelList, userContext);
-                });
-                threadTenantUtil.obtainOtherScheduledExecutor().execute(runnable);
-            } else {
-                List<KnowledgeQaSegmentModel> modelList = new ArrayList<>();
-                // 批量对新增的问答,进行向量化
-                var runnable = new TenantRunnable(() -> {
-                    knowledgeQaSegmentDomainService.batchAddEmbeddingQa(modelList, userContext);
-                });
-                threadTenantUtil.obtainOtherScheduledExecutor().execute(runnable);
-            }
-
+            List<KnowledgeQaSegmentModel> modelList = knowledgeQaSegmentRepository.queryListByIds(ids);
+            var runnable = new TenantRunnable(() -> {
+                knowledgeQaSegmentDomainService.batchAddEmbeddingQa(modelList, userContext);
+            });
+            threadTenantUtil.obtainOtherScheduledExecutor().execute(runnable);
         }
-        System.out.println("updateInfo========start=3>");
 
         return this.knowledgeConfigDomainService.updateInfo(model, userContext);
+    }
+
+    /**
+     * 查询向量模型维度，查询失败返回 null
+     */
+    private Integer queryModelDimension(Long modelId) {
+        if (modelId == null) {
+            return null;
+        }
+        try {
+            var modelConfig = modelApplicationService.queryModelConfigById(modelId);
+            return modelConfig != null ? modelConfig.getDimension() : null;
+        } catch (Exception e) {
+            log.warn("Query embedding model dimension failed, modelId={}", modelId, e);
+            return null;
+        }
     }
 
     @Override
