@@ -159,6 +159,10 @@ public class TableExecutor extends BaseComponent {
                         .append(conditionArgDto.getCompareType() == TableNodeConfigDto.CompareTypeEnum.NOT_NULL ? " != " : " = ")
                         .append("''")
                         .append(")");
+            } else if (conditionArgDto.getCompareType() == TableNodeConfigDto.CompareTypeEnum.LIKE || conditionArgDto.getCompareType() == TableNodeConfigDto.CompareTypeEnum.NOT_LIKE) {
+                condition.append(conditionArgDto.getFirstArg().getName())
+                        .append(convertCompareType(conditionArgDto.getCompareType()))
+                        .append("CONCAT('%', ").append("{{").append(placeholder).append("}}").append(", '%')");
             } else {
                 condition.append(conditionArgDto.getFirstArg().getName())
                         .append(convertCompareType(conditionArgDto.getCompareType()))
