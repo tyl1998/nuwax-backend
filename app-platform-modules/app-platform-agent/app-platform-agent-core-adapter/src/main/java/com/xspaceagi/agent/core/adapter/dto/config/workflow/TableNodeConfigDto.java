@@ -75,6 +75,10 @@ public class TableNodeConfigDto extends NodeConfigDto {
         //为空
         IS_NULL,
         //不为空
-        NOT_NULL
+        NOT_NULL,
+        //模糊匹配
+        LIKE,
+        //模糊不匹配
+        NOT_LIKE
     }
 }

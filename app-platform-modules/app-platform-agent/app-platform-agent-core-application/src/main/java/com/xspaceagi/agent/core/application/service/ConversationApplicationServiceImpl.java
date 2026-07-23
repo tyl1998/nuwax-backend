@@ -61,6 +61,7 @@ import com.xspaceagi.system.spec.exception.BizExceptionCodeEnum;
 import com.xspaceagi.system.spec.tenant.thread.TenantFunctions;
 import com.xspaceagi.system.spec.utils.I18nUtil;
 import com.xspaceagi.system.spec.utils.RedisUtil;
+import com.xspaceagi.system.spec.utils.FileUrlResolver;
 import com.xspaceagi.system.spec.utils.TimeWheel;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
@@ -617,6 +618,17 @@ public class ConversationApplicationServiceImpl extends AbstractTaskExecuteServi
         return text.replaceAll("<think>[\\s\\S]*?</think>", "").trim()
                 .replaceAll("```xml[\\s\\S]*?<tool_.*>[\\s\\S]*?</tool_.*>[\\s\\S]*?```", " ")
                 .replaceAll("<tool_.*>[\\s\\S]*?</tool_.*>", " ");
+    }
+
+    private List<AttachmentDto> toInternalAttachmentUrls(List<AttachmentDto> attachments) {
+        return attachments.stream().map(attachment -> {
+            AttachmentDto internalAttachment = new AttachmentDto();
+            internalAttachment.setFileKey(attachment.getFileKey());
+            internalAttachment.setFileName(attachment.getFileName());
+            internalAttachment.setMimeType(attachment.getMimeType());
+            internalAttachment.setFileUrl(FileUrlResolver.toAbsoluteUrl(attachment.getFileUrl()));
+            return internalAttachment;
+        }).collect(Collectors.toList());
     }
 
     @Override
@@ -1296,6 +1308,9 @@ public class ConversationApplicationServiceImpl extends AbstractTaskExecuteServi
         //附件追加AK
         if (tryReqDto.getAttachments() != null) {
             tryReqDto.getAttachments().forEach(attachmentDto -> attachmentDto.setFileUrl(iFileAccessService.getFileUrlWithAk(attachmentDto.getFileUrl(), true)));
+            if ("TaskAgent".equals(agentConfigDto.getType())) {
+                agentContext.setAttachments(toInternalAttachmentUrls(tryReqDto.getAttachments()));
+            }
         }
 
         //任务模式下，模型上下文轮数改为0

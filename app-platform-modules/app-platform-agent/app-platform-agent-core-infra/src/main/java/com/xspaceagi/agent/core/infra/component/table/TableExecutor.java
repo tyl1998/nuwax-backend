@@ -200,6 +200,12 @@ public class TableExecutor extends BaseComponent {
             case NOT_NULL -> {
                 return " IS NOT NULL ";
             }
+            case LIKE -> {
+                return " LIKE ";
+            }
+            case NOT_LIKE -> {
+                return " NOT LIKE ";
+            }
         }
         return "";
     }
